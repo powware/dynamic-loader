@@ -1,37 +1,20 @@
 cmake_minimum_required(VERSION 3.10)
 
-set(PROJECT_N portforwarder)
-project(${PROJECT_N} VERSION 1.0)
+project(portforwarder VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-file(GLOB_RECURSE SRCS ${PROJECT_SOURCE_DIR}/src/*.cpp)
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
-# a macro that gets all of the header containing directories. 
-MACRO(header_directories return_list includes_base_folder extention )
-    FILE(GLOB_RECURSE new_list ${includes_base_folder}/*.${extention})
-    SET(dir_list "")
-    FOREACH(file_path ${new_list})
-        GET_FILENAME_COMPONENT(dir_path ${file_path} PATH)
-        SET(dir_list ${dir_list} ${dir_path})
-    ENDFOREACH()
-    LIST(REMOVE_DUPLICATES dir_list)
-    SET(${return_list} ${dir_list})
-ENDMACRO()
+qt_standard_project_setup()
 
-# using said macro.
-header_directories(INCLUDES ${PROJECT_SOURCE_DIR}/include/ hpp)
+qt_add_executable(portforwarder ${PROJECT_SOURCE_DIR}/src/main.cpp
+${PROJECT_SOURCE_DIR}/src/mainwindow.cpp
+${PROJECT_SOURCE_DIR}/src/mainwindow.ui)
 
-message("src files:")
-foreach(file ${SRCS})
-        message(STATUS ${file})
-endforeach()
+target_link_libraries(portforwarder PRIVATE Qt6::Widgets)
 
-message("include directories:")
-foreach(dir ${INCLUDES})
-        message(STATUS ${dir})
-endforeach()
-add_executable(${PROJECT_N} ${SRCS})
-
-target_include_directories(${PROJECT_N} PUBLIC include)
+set_target_properties(portforwarder PROPERTIES
+    WIN32_EXECUTABLE ON
+)
