@@ -10,8 +10,9 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
 
     connect(ui->inject_button, &QPushButton::clicked, this, &MainWindow::Inject);
-    connect(ui->process_selector, &QComboBox::activated, this, &MainWindow::ProcessSelectorActivated);
     connect(ui->process_selector, &ProcessSelector::popup, this, &MainWindow::ProcessSelectorPopup);
+
+    ProcessSelectorPopup();
 }
 
 MainWindow::~MainWindow()
@@ -19,12 +20,10 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::ProcessSelectorActivated()
-{
-}
-
 void MainWindow::ProcessSelectorPopup()
 {
+    ui->process_selector->clear();
+
     std::vector<QString> process_names;
     PROCESSENTRY32 current;
     current.dwSize = sizeof(PROCESSENTRY32);
@@ -36,10 +35,15 @@ void MainWindow::ProcessSelectorPopup()
     }
     do
     {
-        process_names.push_back(QString::fromWCharArray(current.szExeFile));
+        QString process_name(QString::fromWCharArray(current.szExeFile));
+        if (process_name.toLower().endsWith(".exe"))
+        {
+            process_names.push_back(std::move(process_name));
+        }
     } while (Process32Next(process_snapshot, &current));
 
-    std::sort(process_names.begin(), process_names.end());
+    std::sort(process_names.begin(), process_names.end(), [](const auto &lhs, const auto &rhs)
+              { return lhs.toLower() < rhs.toLower(); });
 
     auto last = std::unique(process_names.begin(), process_names.end());
 
@@ -53,6 +57,6 @@ void MainWindow::ProcessSelectorPopup()
 
 void MainWindow::Inject()
 {
-    auto data = ui->process_selector->currentData();
+    auto process_name = ui->process_selector->currentText();
     // injector::Inject(L"ac_client.exe", L"C:\\Users\\powware\\repos\\assaultcube\\build\\Debug\\assaultcube.dll");
 }

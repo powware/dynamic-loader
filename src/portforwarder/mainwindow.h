@@ -14,7 +14,6 @@ public:
     ~MainWindow();
 
 private slots:
-    void ProcessSelectorActivated();
     void ProcessSelectorPopup();
     void Inject();
 
