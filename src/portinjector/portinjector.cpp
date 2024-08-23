@@ -3,54 +3,54 @@
 #include <sstream>
 #include <string>
 
-#include "pfwlib.h"
+#include "pfw.h"
 
-class FileHandle
-{
-public:
-	FileHandle() : handle_(INVALID_HANDLE_VALUE) {}
+// class FileHandle
+// {
+// public:
+// 	FileHandle() : handle_(INVALID_HANDLE_VALUE) {}
 
-	FileHandle(std::string_view path, DWORD desired_access, DWORD share_mode, DWORD creation_dispostion)
-	{
-		this->handle_ = CreateFileA(path.data(), desired_access, share_mode, nullptr, creation_dispostion, 0, nullptr);
-		if (this->handle_ == INVALID_HANDLE_VALUE)
-			throw "derive this";
-	}
+// 	FileHandle(std::string_view path, DWORD desired_access, DWORD share_mode, DWORD creation_dispostion)
+// 	{
+// 		this->handle_ = CreateFileA(path.data(), desired_access, share_mode, nullptr, creation_dispostion, 0, nullptr);
+// 		if (this->handle_ == INVALID_HANDLE_VALUE)
+// 			throw "derive this";
+// 	}
 
-	FileHandle(const FileHandle &file_handle) = delete; // requires reference counting
+// 	FileHandle(const FileHandle &file_handle) = delete; // requires reference counting
 
-	FileHandle(FileHandle &&file_handle) noexcept
-	{
-		this->handle_ = file_handle.handle_;
-		file_handle.handle_ = INVALID_HANDLE_VALUE;
-	}
+// 	FileHandle(FileHandle &&file_handle) noexcept
+// 	{
+// 		this->handle_ = file_handle.handle_;
+// 		file_handle.handle_ = INVALID_HANDLE_VALUE;
+// 	}
 
-	~FileHandle()
-	{
-		if (this->handle_ != INVALID_HANDLE_VALUE)
-			CloseHandle(this->handle_);
-	}
+// 	~FileHandle()
+// 	{
+// 		if (this->handle_ != INVALID_HANDLE_VALUE)
+// 			CloseHandle(this->handle_);
+// 	}
 
-	FileHandle &operator=(const FileHandle &file_handle) = delete;
+// 	FileHandle &operator=(const FileHandle &file_handle) = delete;
 
-	FileHandle &operator=(FileHandle &&file_handle) noexcept
-	{
-		this->handle_ = file_handle.handle_;
-		file_handle.handle_ = INVALID_HANDLE_VALUE;
-		return *this;
-	}
+// 	FileHandle &operator=(FileHandle &&file_handle) noexcept
+// 	{
+// 		this->handle_ = file_handle.handle_;
+// 		file_handle.handle_ = INVALID_HANDLE_VALUE;
+// 		return *this;
+// 	}
 
-	template <typename T>
-	operator T() const
-	{
-		if (this->handle_ == INVALID_HANDLE_VALUE)
-			throw "uninitalized";
-		return this->handle_;
-	}
+// 	template <typename T>
+// 	operator T() const
+// 	{
+// 		if (this->handle_ == INVALID_HANDLE_VALUE)
+// 			throw "uninitalized";
+// 		return this->handle_;
+// 	}
 
-private:
-	HANDLE handle_;
-};
+// private:
+// 	HANDLE handle_;
+// };
 
 // class File
 // {
@@ -92,81 +92,81 @@ private:
 // 	}
 // };
 
-class Process
-{
-public:
-	Process(std::string_view process_name) : process_id_(pfw::GetProcessId(process_name)) {}
+// class Process
+// {
+// public:
+// 	Process(std::string_view process_name) : process_id_(pfw::GetProcessId(process_name)) {}
 
-	Process(DWORD process_id) : process_id_(process_id) {}
+// 	Process(DWORD process_id) : process_id_(process_id) {}
 
-	pfw::ProcessHandle GetProcessHandle()
-	{
-		return pfw::ProcessHandle(process_id_);
-	}
+// 	pfw::ProcessHandle GetProcessHandle()
+// 	{
+// 		return pfw::ProcessHandle(process_id_);
+// 	}
 
-private:
-	DWORD process_id_;
-};
+// private:
+// 	DWORD process_id_;
+// };
 
-class VirtualMemory
-{
-public:
-	VirtualMemory(HANDLE process_handle, void *target_address, std::size_t size, DWORD allocation_type, DWORD protection, bool raii = true) : process_handle_(process_handle),
-																																			  handle_(VirtualAllocEx(process_handle, target_address, size, allocation_type, protection)), size_(size), remote_(true), raii_(raii)
-	{
-		if (this->handle_ == nullptr)
-			throw std::bad_alloc();
-	};
+// class VirtualMemory
+// {
+// public:
+// 	VirtualMemory(HANDLE process_handle, void *target_address, std::size_t size, DWORD allocation_type, DWORD protection, bool raii = true) : process_handle_(process_handle),
+// 																																			  handle_(VirtualAllocEx(process_handle, target_address, size, allocation_type, protection)), size_(size), remote_(true), raii_(raii)
+// 	{
+// 		if (this->handle_ == nullptr)
+// 			throw std::bad_alloc();
+// 	};
 
-	VirtualMemory(void *target_address, std::size_t size, DWORD allocation_type, DWORD protection) : process_handle_(GetCurrentProcess()),
-																									 handle_(VirtualAlloc(target_address, size, allocation_type, protection)), size_(size), remote_(false), raii_(true)
-	{
-		if (this->handle_ == nullptr)
-			throw std::bad_alloc();
-	};
+// 	VirtualMemory(void *target_address, std::size_t size, DWORD allocation_type, DWORD protection) : process_handle_(GetCurrentProcess()),
+// 																									 handle_(VirtualAlloc(target_address, size, allocation_type, protection)), size_(size), remote_(false), raii_(true)
+// 	{
+// 		if (this->handle_ == nullptr)
+// 			throw std::bad_alloc();
+// 	};
 
-	~VirtualMemory()
-	{
-		if (this->handle_ && this->raii_)
-		{
-			if (this->remote_)
-				VirtualFreeEx(process_handle_, handle_, 0, MEM_RELEASE);
-			else
-				VirtualFree(handle_, 0, MEM_RELEASE);
-		}
-	}
+// 	~VirtualMemory()
+// 	{
+// 		if (this->handle_ && this->raii_)
+// 		{
+// 			if (this->remote_)
+// 				VirtualFreeEx(process_handle_, handle_, 0, MEM_RELEASE);
+// 			else
+// 				VirtualFree(handle_, 0, MEM_RELEASE);
+// 		}
+// 	}
 
-	template <typename T>
-	operator T() const
-	{
-		return handle_;
-	}
+// 	template <typename T>
+// 	operator T() const
+// 	{
+// 		return handle_;
+// 	}
 
-	void DisableRAII()
-	{
-		this->raii_ = false;
-	}
+// 	void DisableRAII()
+// 	{
+// 		this->raii_ = false;
+// 	}
 
-private:
-	HANDLE handle_;
-	HANDLE process_handle_;
-	const std::size_t size_;
-	const bool remote_;
-	bool raii_;
-};
+// private:
+// 	HANDLE handle_;
+// 	HANDLE process_handle_;
+// 	const std::size_t size_;
+// 	const bool remote_;
+// 	bool raii_;
+// };
 
-class Module
-{
-public:
-	virtual void Detach() = 0;
+// class Module
+// {
+// public:
+// 	virtual void Detach() = 0;
 
-protected:
-	Module(Process process, std::string dll_path) : process_(process), dll_path_(dll_path) {};
-	Process process_;
-	HANDLE handle_ = nullptr;
-	std::string dll_path_;
-	std::size_t size_ = 0;
-};
+// protected:
+// 	Module(Process process, std::string dll_path) : process_(process), dll_path_(dll_path) {};
+// 	Process process_;
+// 	HANDLE handle_ = nullptr;
+// 	std::string dll_path_;
+// 	std::size_t size_ = 0;
+// };
 
 // class ManuallyMappedModule : public Module
 // {
@@ -350,32 +350,32 @@ protected:
 // 	}
 // };
 
-class LibraryModule : public Module
-{
-public:
-	LibraryModule(Process process, std::string dll_path) : Module(process, dll_path)
-	{
-		pfw::ProcessHandle process_handle = process_.GetProcessHandle();
-		VirtualMemory loader_memory(process_handle, nullptr, this->dll_path_.size(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-		HMODULE kernel_module = pfw::GetRemoteModuleHandle(process_handle, "Kernel32.dll");
-		void *load_library = pfw::GetRemoteProcAddress(process_handle, kernel_module, "LoadLibraryA");
-		pfw::stringutils::SetRemoteString(process_handle, loader_memory, this->dll_path_);
-		pfw::RemoteThread loader_thread(process_handle, load_library, loader_memory);
-		loader_thread.Join();
-		// this->handle_ = loader_thread.GetExitCode();
-	}
+// class LibraryModule : public Module
+// {
+// public:
+// 	LibraryModule(Process process, std::string dll_path) : Module(process, dll_path)
+// 	{
+// 		pfw::ProcessHandle process_handle = process_.GetProcessHandle();
+// 		VirtualMemory loader_memory(process_handle, nullptr, this->dll_path_.size(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+// 		HMODULE kernel_module = pfw::GetRemoteModuleHandle(process_handle, "Kernel32.dll");
+// 		void *load_library = pfw::GetRemoteProcAddress(process_handle, kernel_module, "LoadLibraryA");
+// 		pfw::stringutils::SetRemoteString(process_handle, loader_memory, this->dll_path_);
+// 		pfw::RemoteThread loader_thread(process_handle, load_library, loader_memory);
+// 		loader_thread.Join();
+// 		// this->handle_ = loader_thread.GetExitCode();
+// 	}
 
-	void Detach() override
-	{
-		pfw::ProcessHandle process_handle = process_.GetProcessHandle();
-		VirtualMemory module_handle_memory(process_handle, nullptr, sizeof(HMODULE), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-		pfw::SetRemoteMemory(process_handle, module_handle_memory, this->handle_);
-		HMODULE kernel_module = pfw::GetRemoteModuleHandle(process_handle, "Kernel32.dll");
-		void *free_library = pfw::GetRemoteProcAddress(process_handle, kernel_module, "FreeLibrary");
-		pfw::RemoteThread loader_thread(process_handle, free_library, module_handle_memory);
-		loader_thread.Join();
-	}
-};
+// 	void Detach() override
+// 	{
+// 		pfw::ProcessHandle process_handle = process_.GetProcessHandle();
+// 		VirtualMemory module_handle_memory(process_handle, nullptr, sizeof(HMODULE), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+// 		pfw::SetRemoteMemory(process_handle, module_handle_memory, this->handle_);
+// 		HMODULE kernel_module = pfw::GetRemoteModuleHandle(process_handle, "Kernel32.dll");
+// 		void *free_library = pfw::GetRemoteProcAddress(process_handle, kernel_module, "FreeLibrary");
+// 		pfw::RemoteThread loader_thread(process_handle, free_library, module_handle_memory);
+// 		loader_thread.Join();
+// 	}
+// };
 
 // int ppmain()
 // {
@@ -410,7 +410,15 @@ public:
 
 int main()
 {
-	Process ac_client("ac_client.exe");
-	LibraryModule assaultcube(ac_client, "C:\\Users\\powware\\repos\\assaultcube\\build\\Release\\assaultcube.dll");
+	try
+	{
+		pfw::SetDebugPrivileges();
+	}
+	catch (std::exception &e)
+	{
+		std::cout << "SetDebugPrivileges failed. You may need to restart with admin privileges.\n";
+	}
+	// Process ac_client("ac_client.exe");
+	// LibraryModule assaultcube(ac_client, "C:\\Users\\powware\\repos\\assaultcube\\build\\Release\\assaultcube.dll");
 	return 0;
 }

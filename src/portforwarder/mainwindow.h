@@ -5,22 +5,21 @@
 
 #include "ui_mainwindow.h"
 
-namespace ui
+class MainWindow : public QMainWindow
 {
-    class MainWindow : public QMainWindow
-    {
-        Q_OBJECT
+    Q_OBJECT
 
-    public:
-        MainWindow(QWidget *parent = nullptr);
-        ~MainWindow();
+public:
+    MainWindow(QWidget *parent = nullptr);
+    ~MainWindow();
 
-    private slots:
-        void Inject();
+private slots:
+    void ProcessSelectorActivated();
+    void ProcessSelectorPopup();
+    void Inject();
 
-    private:
-        Ui_MainWindow *ui;
-    };
-}
+private:
+    Ui_MainWindow *ui;
+};
 
 #endif // __MAINWINDOW_H__

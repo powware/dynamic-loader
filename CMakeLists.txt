@@ -22,21 +22,23 @@ endif()
 
 message(STATUS "Target: x${TARGET_BITNESS}")
 
+find_package(pfw REQUIRED)
+
 if(TARGET_BITNESS STREQUAL "64")
   find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
   qt_standard_project_setup()
 
   qt_add_executable(
-    portforwarder ${PROJECT_SOURCE_DIR}/src/portforwarder/portforwarder.cpp
+    portforwarder
+    ${PROJECT_SOURCE_DIR}/src/portforwarder/portforwarder.cpp
     ${PROJECT_SOURCE_DIR}/src/portforwarder/mainwindow.cpp
+    ${PROJECT_SOURCE_DIR}/src/portforwarder/processselector.cpp
     ${PROJECT_SOURCE_DIR}/src/portforwarder/mainwindow.ui)
-
-  add_definitions(-DWIN32_LEAN_AND_MEAN)
 
   target_include_directories(portforwarder PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
-  target_link_libraries(portforwarder PRIVATE Qt6::Widgets)
+  target_link_libraries(portforwarder PRIVATE Qt6::Widgets pfw::pfw)
 
   set_target_properties(portforwarder PROPERTIES WIN32_EXECUTABLE ON)
 endif()
