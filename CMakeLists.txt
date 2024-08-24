@@ -41,10 +41,16 @@ if(TARGET_BITNESS STREQUAL "64")
   target_link_libraries(portforwarder PRIVATE Qt6::Widgets pfw::pfw)
 
   set_target_properties(portforwarder PROPERTIES WIN32_EXECUTABLE ON)
+elseif()
+  message(STATUS "Only building injector.")
 endif()
 
 add_executable(portinjector
                ${PROJECT_SOURCE_DIR}/src/portinjector/portinjector.cpp)
+
+set(INJECTOR_NAME "portinjector${TARGET_BITNESS}")
+
+set_target_properties(portinjector PROPERTIES OUTPUT_NAME ${INJECTOR_NAME})
 
 find_package(pfw REQUIRED)
 
