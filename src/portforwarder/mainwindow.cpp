@@ -1,5 +1,7 @@
 #include "mainwindow.h"
 
+#include <windows.h>
+#include <shellapi.h>
 #include <format>
 
 #include "pfw.h"
@@ -42,8 +44,95 @@ MainWindow::~MainWindow()
     delete ui_;
 }
 
+std::optional<QPixmap> QPixmapFromFilePath(const std::wstring &file_path)
+{
+
+    SHFILEINFO shFileInfo;
+    if (!SHGetFileInfo(file_path.c_str(), 0, &shFileInfo, sizeof(shFileInfo), SHGFI_ICON | SHGFI_LARGEICON))
+    {
+        return std::nullopt;
+    }
+
+    ICONINFO iconInfo;
+    if (!GetIconInfo(shFileInfo.hIcon, &iconInfo))
+    {
+        return std::nullopt;
+    }
+
+    BITMAP bm;
+    if (!GetObject(iconInfo.hbmColor, sizeof(BITMAP), &bm))
+    {
+        return std::nullopt;
+    }
+
+    int width = bm.bmWidth;
+    int height = bm.bmHeight;
+
+    QImage image(width, height, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+
+    HDC hdc = CreateCompatibleDC(nullptr);
+    SelectObject(hdc, iconInfo.hbmColor);
+
+    BITMAPINFOHEADER bi;
+    memset(&bi, 0, sizeof(bi));
+    bi.biSize = sizeof(BITMAPINFOHEADER);
+    bi.biWidth = width;
+    bi.biHeight = -height; // Negative indicates a top-down DIB
+    bi.biPlanes = 1;
+    bi.biBitCount = 32;
+    bi.biCompression = BI_RGB;
+
+    GetDIBits(hdc, iconInfo.hbmColor, 0, height, image.bits(), reinterpret_cast<BITMAPINFO *>(&bi), DIB_RGB_COLORS);
+
+    DeleteObject(iconInfo.hbmColor);
+    DeleteObject(iconInfo.hbmMask);
+    DeleteDC(hdc);
+
+    return QPixmap::fromImage(image);
+}
+
+std::optional<std::wstring> ProcessPathFromId(DWORD process_id)
+{
+
+    MODULEENTRY32 module_entry;
+    HANDLE module_snapshot_handle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, process_id);
+    if (module_snapshot_handle == INVALID_HANDLE_VALUE)
+    {
+        return std::nullopt;
+    }
+
+    pfw::HandleGuard module_snapshot_handle_guard(module_snapshot_handle);
+
+    module_entry.dwSize = sizeof(MODULEENTRY32);
+
+    if (!Module32First(module_snapshot_handle, &module_entry))
+    {
+        return std::nullopt;
+    }
+
+    return module_entry.szExePath;
+}
+
+std::optional<QPixmap> QPixmapFromId(DWORD process_id)
+{
+    auto process_path = ProcessPathFromId(process_id);
+    if (!process_path)
+    {
+        return std::nullopt;
+    }
+
+    return QPixmapFromFilePath(*process_path);
+}
+
 void MainWindow::ProcessSelectorPopup()
 {
+    struct Process
+    {
+        QString name;
+        DWORD id;
+    };
+
     auto process_snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (process_snapshot == INVALID_HANDLE_VALUE)
     {
@@ -59,28 +148,37 @@ void MainWindow::ProcessSelectorPopup()
         return;
     }
 
-    std::vector<std::tuple<QString, DWORD>> processes;
+    std::vector<Process> processes;
     do
     {
         QString process_name(QString::fromWCharArray(current.szExeFile));
         if (process_name.toLower().endsWith(".exe"))
         {
-            processes.push_back(std::make_tuple(std::move(process_name), current.th32ProcessID));
+            processes.push_back({std::move(process_name), current.th32ProcessID});
         }
     } while (Process32Next(process_snapshot, &current));
 
     std::sort(processes.begin(), processes.end(), [](const auto &lhs, const auto &rhs)
-              { return std::get<0>(lhs).toLower() < std::get<0>(rhs).toLower(); });
+              { return lhs.name.toLower() < rhs.name.toLower(); });
 
-    auto last = std::unique(processes.begin(), processes.end());
+    auto last = std::unique(processes.begin(), processes.end(), [](const auto &lhs, const auto &rhs)
+                            { return lhs.name == rhs.name; });
 
     processes.erase(last, processes.end());
 
     ui_->process_selector->clear();
 
-    for (auto &process_name : processes)
+    for (const auto &process : processes)
     {
-        ui_->process_selector->addItem(std::get<0>(process_name), uint(std::get<1>(process_name)));
+        auto pixmap = QPixmapFromId(process.id);
+        if (pixmap)
+        {
+            ui_->process_selector->addItem(QIcon(*pixmap), process.name, uint(process.id));
+        }
+        else
+        {
+            ui_->process_selector->addItem(process.name, uint(process.id)); // Add without icon if something went wrong
+        }
     }
 }
 
