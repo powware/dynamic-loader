@@ -4,6 +4,8 @@
 #include <shellapi.h>
 #include <format>
 
+#include <QFileDialog>
+
 #include <pfw.h>
 
 #include "processselector.h"
@@ -25,8 +27,12 @@ MainWindow::MainWindow(QString application_directory, QWidget *parent)
     success_message_.setIcon(QMessageBox::Information);
     success_message_.setModal(true);
 
+    connect(ui_->file_selector, &QLineEdit::textChanged, this, &MainWindow::UpdateTooltip);
+    connect(ui_->file_browser, &QToolButton::clicked, this, &MainWindow::BrowseFiles);
+    connect(ui_->process_selector, &ProcessSelector::popup, this, &MainWindow::PopulatePopup);
     connect(ui_->inject_button, &QPushButton::clicked, this, &MainWindow::Inject);
-    connect(ui_->process_selector, &ProcessSelector::popup, this, &MainWindow::ProcessSelectorPopup);
+
+    PopulatePopup();
 
     auto incomplete = (application_directory + "/portinjector").toStdWString();
 
@@ -40,8 +46,6 @@ MainWindow::MainWindow(QString application_directory, QWidget *parent)
 
     portinjector32_ = incomplete + L"32.exe";
     portinjector64_ = incomplete + L"64.exe";
-
-    ProcessSelectorPopup();
 }
 
 MainWindow::~MainWindow()
@@ -130,7 +134,17 @@ std::optional<QPixmap> QPixmapFromId(DWORD process_id)
     return QPixmapFromFilePath(*process_path);
 }
 
-void MainWindow::ProcessSelectorPopup()
+void MainWindow::UpdateTooltip(const QString &n)
+{
+    ui_->file_selector->setToolTip(n);
+}
+
+void MainWindow::BrowseFiles()
+{
+    ui_->file_selector->setText(QFileDialog::getOpenFileName(this, "Select DLL", "", "(*.dll)"));
+}
+
+void MainWindow::PopulatePopup()
 {
     struct Process
     {
@@ -207,7 +221,9 @@ void MainWindow::Inject()
     }
     const auto &selected_portinjector = is_32bit ? portinjector32_ : portinjector64_;
 
-    auto command_line = std::format(L"-p {}", process_id);
+    std::wstring dll_path = ui_->file_selector->text().toStdWString();
+
+    auto command_line = std::format(L"--pid {} --dll {} --load", process_id, dll_path);
 
     STARTUPINFO startup_info = {.cb = sizeof(startup_info)};
     PROCESS_INFORMATION process_info;
@@ -232,7 +248,6 @@ void MainWindow::Inject()
         error_message_.show();
         return;
     }
-    // injector::Inject(L"ac_client.exe", L"C:\\Users\\powware\\repos\\assaultcube\\build\\Debug\\assaultcube.dll");
 
     success_message_.setText("Injection successfull.");
     success_message_.show();

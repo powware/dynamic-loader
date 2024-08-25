@@ -16,7 +16,9 @@ public:
     ~MainWindow();
 
 private slots:
-    void ProcessSelectorPopup();
+    void UpdateTooltip(const QString &n);
+    void BrowseFiles();
+    void PopulatePopup();
     void Inject();
 
 private:
