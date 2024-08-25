@@ -2,7 +2,7 @@
 #define __MAINWINDOW_H__
 
 #include <QMainWindow>
-#include <QErrorMessage>
+#include <QMessageBox>
 #include <string>
 
 #include "ui_mainwindow.h"
@@ -21,7 +21,8 @@ private slots:
 
 private:
     Ui_MainWindow *ui_;
-    QErrorMessage error_message_;
+    QMessageBox error_message_;
+    QMessageBox success_message_;
     std::wstring portinjector32_;
     std::wstring portinjector64_;
 };

@@ -4,7 +4,7 @@
 #include <shellapi.h>
 #include <format>
 
-#include "pfw.h"
+#include <pfw.h>
 
 #include "processselector.h"
 
@@ -14,11 +14,16 @@ MainWindow::MainWindow(QString application_directory, QWidget *parent)
     ui_->setupUi(this);
     error_message_.setWindowTitle("Error");
     error_message_.setModal(true);
+    error_message_.setIcon(QMessageBox::Critical);
     auto check_box = error_message_.findChild<QCheckBox *>();
     if (check_box)
     {
         check_box->setVisible(false);
     }
+
+    success_message_.setWindowTitle("Success");
+    success_message_.setIcon(QMessageBox::Information);
+    success_message_.setModal(true);
 
     connect(ui_->inject_button, &QPushButton::clicked, this, &MainWindow::Inject);
     connect(ui_->process_selector, &ProcessSelector::popup, this, &MainWindow::ProcessSelectorPopup);
@@ -136,7 +141,7 @@ void MainWindow::ProcessSelectorPopup()
     auto process_snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (process_snapshot == INVALID_HANDLE_VALUE)
     {
-        error_message_.showMessage("CreateToolhelp32Snapshot failed.");
+        error_message_.setText("CreateToolhelp32Snapshot failed.");
         return;
     }
 
@@ -144,7 +149,7 @@ void MainWindow::ProcessSelectorPopup()
     current.dwSize = sizeof(PROCESSENTRY32);
     if (!Process32First(process_snapshot, &current))
     {
-        error_message_.showMessage("Process32First failed.");
+        error_message_.setText("Process32First failed.");
         return;
     }
 
@@ -188,18 +193,19 @@ void MainWindow::Inject()
     HANDLE process_handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id);
     if (process_handle == NULL)
     {
-        error_message_.showMessage("OpenProcess failed.");
+        error_message_.setText("OpenProcess failed.");
+        error_message_.show();
         return;
     }
     pfw::HandleGuard process_handle_guard(process_handle);
     BOOL is_32bit;
     if (!IsWow64Process(process_handle, &is_32bit))
     {
-        error_message_.showMessage("IsWow64Process failed.");
+        error_message_.setText("IsWow64Process failed.");
+        error_message_.show();
         return;
     }
-    const auto &selected_portinjector = [this, is_32bit]() -> auto &
-    { return is_32bit ? portinjector32_ : portinjector64_; }();
+    const auto &selected_portinjector = is_32bit ? portinjector32_ : portinjector64_;
 
     auto command_line = std::format(L"-p {}", process_id);
 
@@ -207,7 +213,7 @@ void MainWindow::Inject()
     PROCESS_INFORMATION process_info;
     if (!CreateProcess(selected_portinjector.c_str(), command_line.data(), nullptr, nullptr, false, CREATE_NO_WINDOW, nullptr, nullptr, &startup_info, &process_info))
     {
-        error_message_.showMessage("CreateProcess failed.");
+        error_message_.setText("CreateProcess failed.");
     }
     pfw::HandleGuard injector_process_handle_guard(process_info.hProcess);
     pfw::HandleGuard injector_thread_handle(process_info.hThread);
@@ -216,12 +222,18 @@ void MainWindow::Inject()
     DWORD exit_code;
     if (!GetExitCodeProcess(process_info.hProcess, &exit_code))
     {
-        error_message_.showMessage("GetExitCodeProcess failed.");
+        error_message_.setText("GetExitCodeProcess failed.");
+        error_message_.show();
     }
 
     if (exit_code)
     {
-        error_message_.showMessage("Injection failed.");
+        error_message_.setText("Injection failed.");
+        error_message_.show();
+        return;
     }
     // injector::Inject(L"ac_client.exe", L"C:\\Users\\powware\\repos\\assaultcube\\build\\Debug\\assaultcube.dll");
+
+    success_message_.setText("Injection successfull.");
+    success_message_.show();
 }

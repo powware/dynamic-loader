@@ -3,7 +3,7 @@
 #include <sstream>
 #include <string>
 
-#include "pfw.h"
+#include <pfw.h>
 
 // class FileHandle
 // {
@@ -353,28 +353,7 @@
 // class LibraryModule : public Module
 // {
 // public:
-// 	LibraryModule(Process process, std::string dll_path) : Module(process, dll_path)
-// 	{
-// 		pfw::ProcessHandle process_handle = process_.GetProcessHandle();
-// 		VirtualMemory loader_memory(process_handle, nullptr, this->dll_path_.size(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-// 		HMODULE kernel_module = pfw::GetRemoteModuleHandle(process_handle, "Kernel32.dll");
-// 		void *load_library = pfw::GetRemoteProcAddress(process_handle, kernel_module, "LoadLibraryA");
-// 		pfw::stringutils::SetRemoteString(process_handle, loader_memory, this->dll_path_);
-// 		pfw::RemoteThread loader_thread(process_handle, load_library, loader_memory);
-// 		loader_thread.Join();
-// 		// this->handle_ = loader_thread.GetExitCode();
-// 	}
 
-// 	void Detach() override
-// 	{
-// 		pfw::ProcessHandle process_handle = process_.GetProcessHandle();
-// 		VirtualMemory module_handle_memory(process_handle, nullptr, sizeof(HMODULE), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-// 		pfw::SetRemoteMemory(process_handle, module_handle_memory, this->handle_);
-// 		HMODULE kernel_module = pfw::GetRemoteModuleHandle(process_handle, "Kernel32.dll");
-// 		void *free_library = pfw::GetRemoteProcAddress(process_handle, kernel_module, "FreeLibrary");
-// 		pfw::RemoteThread loader_thread(process_handle, free_library, module_handle_memory);
-// 		loader_thread.Join();
-// 	}
 // };
 
 // int ppmain()
@@ -408,8 +387,21 @@
 // 	return 0;
 // }
 
-int main()
+int main(int argc, char *argv[])
 {
+	for (int i = 0; i < argc; ++i)
+	{
+		std::string arg = argv[i];
+		if (arg == "-p" && i + 1 < argc)
+		{
+			DWORD process_id = std::stoul(argv[++i]);
+			pfw::OpenProcess(process_id);
+			if ()
+			{
+			}
+		}
+	}
+
 	if (!pfw::SetDebugPrivileges())
 	{
 		std::cout << "SetDebugPrivileges failed. You may need to restart with admin privileges.\n";
