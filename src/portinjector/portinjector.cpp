@@ -410,15 +410,12 @@
 
 int main()
 {
-	try
-	{
-		pfw::SetDebugPrivileges();
-	}
-	catch (std::exception &e)
+	if (!pfw::SetDebugPrivileges())
 	{
 		std::cout << "SetDebugPrivileges failed. You may need to restart with admin privileges.\n";
 	}
+
 	// Process ac_client("ac_client.exe");
 	// LibraryModule assaultcube(ac_client, "C:\\Users\\powware\\repos\\assaultcube\\build\\Release\\assaultcube.dll");
-	return 0;
+	return EXIT_SUCCESS;
 }
