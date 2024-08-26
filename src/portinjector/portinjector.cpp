@@ -313,13 +313,13 @@ private:
 bool LoadModule(HANDLE process_handle, std::wstring dll_path)
 {
 
-	auto kernel_module = pfw::GetRemoteModuleHandle(process_handle, L"Kernel32.dll");
+	const auto kernel_module = pfw::GetRemoteModuleHandle(process_handle, L"Kernel32.dll");
 	if (!kernel_module)
 	{
 		return false;
 	}
 
-	auto load_library = pfw::GetRemoteProcAddress(process_handle, *kernel_module, "LoadLibraryW");
+	const auto load_library = pfw::GetRemoteProcAddress(process_handle, *kernel_module, "LoadLibraryW");
 	if (!load_library)
 	{
 		return false;
@@ -345,7 +345,7 @@ bool LoadModule(HANDLE process_handle, std::wstring dll_path)
 	}
 	loader_thread->Join();
 
-	auto exit_code = loader_thread->GetExitCode();
+	const auto exit_code = loader_thread->GetExitCode();
 	if (!exit_code)
 	{
 		return false;
