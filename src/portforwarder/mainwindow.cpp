@@ -53,11 +53,17 @@ MainWindow::~MainWindow()
     delete ui_;
 }
 
-std::optional<QPixmap> QPixmapFromFilePath(const std::wstring &file_path)
+std::optional<QIcon> QIconFromProcessId(DWORD process_id)
 {
 
+    auto exe_path = pfw::ExecutablePathFromProcessId(process_id);
+    if (!exe_path)
+    {
+        return std::nullopt;
+    }
+
     SHFILEINFO shFileInfo;
-    if (!SHGetFileInfo(file_path.c_str(), 0, &shFileInfo, sizeof(shFileInfo), SHGFI_ICON | SHGFI_LARGEICON))
+    if (!SHGetFileInfo(exe_path->c_str(), 0, &shFileInfo, sizeof(shFileInfo), SHGFI_ICON | SHGFI_LARGEICON))
     {
         return std::nullopt;
     }
@@ -98,40 +104,7 @@ std::optional<QPixmap> QPixmapFromFilePath(const std::wstring &file_path)
     DeleteObject(iconInfo.hbmMask);
     DeleteDC(hdc);
 
-    return QPixmap::fromImage(image);
-}
-
-std::optional<std::wstring> ProcessPathFromId(DWORD process_id)
-{
-
-    MODULEENTRY32 module_entry;
-    HANDLE module_snapshot_handle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, process_id);
-    if (module_snapshot_handle == INVALID_HANDLE_VALUE)
-    {
-        return std::nullopt;
-    }
-
-    pfw::HandleGuard module_snapshot_handle_guard(module_snapshot_handle);
-
-    module_entry.dwSize = sizeof(MODULEENTRY32);
-
-    if (!Module32First(module_snapshot_handle, &module_entry))
-    {
-        return std::nullopt;
-    }
-
-    return module_entry.szExePath;
-}
-
-std::optional<QPixmap> QPixmapFromId(DWORD process_id)
-{
-    auto process_path = ProcessPathFromId(process_id);
-    if (!process_path)
-    {
-        return std::nullopt;
-    }
-
-    return QPixmapFromFilePath(*process_path);
+    return QIcon(QPixmap::fromImage(image));
 }
 
 void MainWindow::UpdateTooltip(const QString &n)
@@ -149,7 +122,7 @@ void MainWindow::PopulatePopup()
     struct Process
     {
         QString name;
-        DWORD id;
+        std::optional<QIcon> icon;
     };
 
     auto process_snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -173,7 +146,8 @@ void MainWindow::PopulatePopup()
         QString process_name(QString::fromWCharArray(current.szExeFile));
         if (process_name.toLower().endsWith(".exe"))
         {
-            processes.push_back({std::move(process_name), current.th32ProcessID});
+
+            processes.push_back({std::move(process_name), QIconFromProcessId(current.th32ProcessID)});
         }
     } while (Process32Next(process_snapshot, &current));
 
@@ -189,31 +163,37 @@ void MainWindow::PopulatePopup()
 
     for (const auto &process : processes)
     {
-        auto pixmap = QPixmapFromId(process.id);
-        if (pixmap)
+        if (process.icon)
         {
-            ui_->process_selector->addItem(QIcon(*pixmap), process.name, uint(process.id));
+            ui_->process_selector->addItem(*process.icon, process.name);
         }
         else
         {
-            ui_->process_selector->addItem(process.name, uint(process.id)); // Add without icon if something went wrong
+            ui_->process_selector->addItem(process.name); // Add without icon if something went wrong
         }
     }
 }
 
 void MainWindow::Inject()
 {
-    DWORD process_id = ui_->process_selector->currentData().toUInt();
-    HANDLE process_handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id);
-    if (process_handle == NULL)
+    auto process_id = pfw::GetProcessId(ui_->process_selector->currentText().toStdWString());
+    if (!process_id)
+    {
+        error_message_.setText("GetProcessId failed.");
+        error_message_.show();
+        return;
+    }
+
+    auto process = pfw::OpenProcess(*process_id, PROCESS_QUERY_LIMITED_INFORMATION);
+    if (!process)
     {
         error_message_.setText("OpenProcess failed.");
         error_message_.show();
         return;
     }
-    pfw::HandleGuard process_handle_guard(process_handle);
+
     BOOL is_32bit;
-    if (!IsWow64Process(process_handle, &is_32bit))
+    if (!IsWow64Process(*process, &is_32bit))
     {
         error_message_.setText("IsWow64Process failed.");
         error_message_.show();
@@ -223,20 +203,38 @@ void MainWindow::Inject()
 
     std::wstring dll_path = ui_->file_selector->text().toStdWString();
 
-    auto command_line = std::format(L"--pid {} --dll {} --load", process_id, dll_path);
+    auto command_line = std::format(L"--pid {} --dll {} --load", *process_id, dll_path);
 
-    STARTUPINFO startup_info = {.cb = sizeof(startup_info)};
-    PROCESS_INFORMATION process_info;
-    if (!CreateProcess(selected_portinjector.c_str(), command_line.data(), nullptr, nullptr, false, CREATE_NO_WINDOW, nullptr, nullptr, &startup_info, &process_info))
+    struct RemoteProcess
+    {
+        pfw::HandleGuard process;
+        pfw::HandleGuard thread;
+    };
+
+    auto injector_process = [&selected_portinjector, &command_line]() -> std::optional<RemoteProcess>
+    {
+        STARTUPINFO startup_info = {.cb = sizeof(startup_info)};
+        PROCESS_INFORMATION process_info;
+        if (!CreateProcess(selected_portinjector.c_str(), command_line.data(), nullptr, nullptr, false, CREATE_NO_WINDOW, nullptr, nullptr, &startup_info, &process_info))
+        {
+            return std::nullopt;
+        }
+        auto process = pfw::HandleGuard::Create(process_info.hProcess);
+        auto thread = pfw::HandleGuard::Create(process_info.hThread);
+        if (!process || !thread)
+        {
+            return std::nullopt;
+        }
+        return RemoteProcess(std::move(*process), std::move(*thread));
+    }();
+    if (!injector_process)
     {
         error_message_.setText("CreateProcess failed.");
     }
-    pfw::HandleGuard injector_process_handle_guard(process_info.hProcess);
-    pfw::HandleGuard injector_thread_handle(process_info.hThread);
-    WaitForSingleObject(process_info.hProcess, INFINITE);
+    WaitForSingleObject(injector_process->process, INFINITE);
 
     DWORD exit_code;
-    if (!GetExitCodeProcess(process_info.hProcess, &exit_code))
+    if (!GetExitCodeProcess(injector_process->process, &exit_code))
     {
         error_message_.setText("GetExitCodeProcess failed.");
         error_message_.show();
