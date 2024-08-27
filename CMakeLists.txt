@@ -38,7 +38,7 @@ if(TARGET_BITNESS STREQUAL "64")
 
   target_include_directories(portforwarder PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
-  target_link_libraries(portforwarder PRIVATE Qt6::Widgets pfw::pfw)
+  target_link_libraries(portforwarder PRIVATE Qt6::Widgets pfw::pfw Rpcrt4)
 
   set_target_properties(portforwarder PROPERTIES WIN32_EXECUTABLE ON)
 elseif()

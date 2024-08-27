@@ -199,10 +199,52 @@ void MainWindow::Inject()
         error_message_.show();
         return;
     }
-    const auto &selected_portinjector = is_32bit ? portinjector32_ : portinjector64_;
 
     std::wstring dll_path = ui_->file_selector->text().toStdWString();
 
+    if (ui_->dll_copy->isChecked())
+    {
+        auto temp_directory_path = std::filesystem::temp_directory_path();
+
+        auto uuid = []() -> std::optional<std::wstring>
+        {
+            UUID uuid;
+            RPC_WSTR uuid_string;
+            if (UuidCreate(&uuid))
+            {
+                return std::nullopt;
+            }
+            if (UuidToStringW(&uuid, &uuid_string))
+            {
+                return std::nullopt;
+            }
+            std::wstring result(reinterpret_cast<wchar_t *>(uuid_string));
+            RpcStringFreeW(&uuid_string);
+            return result;
+        }();
+        if (!uuid)
+        {
+            error_message_.setText("UUID creation failed.");
+            error_message_.show();
+            return;
+        }
+
+        temp_directory_path = temp_directory_path / (*uuid + L"_portforwader");
+
+        try
+        {
+            std::filesystem::create_directory(temp_directory_path);
+            auto temp_path = temp_directory_path / std::filesystem::path(dll_path).filename();
+            std::filesystem::copy_file(dll_path, temp_path);
+            dll_path = temp_path.wstring();
+        }
+        catch (std::exception &)
+        {
+            error_message_.setText("Creating dll copy failed.");
+            error_message_.show();
+            return;
+        }
+    }
     auto command_line = std::format(L"--pid {} --dll {} --load", *process_id, dll_path);
 
     struct RemoteProcess
@@ -210,6 +252,8 @@ void MainWindow::Inject()
         pfw::HandleGuard process;
         pfw::HandleGuard thread;
     };
+
+    const auto &selected_portinjector = is_32bit ? portinjector32_ : portinjector64_;
 
     auto injector_process = [&selected_portinjector, &command_line]() -> std::optional<RemoteProcess>
     {
