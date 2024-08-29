@@ -245,6 +245,7 @@ void MainWindow::Inject()
             return;
         }
     }
+
     auto command_line = std::format(L"--pid {} --dll {} --load", *process_id, dll_path);
 
     struct RemoteProcess
