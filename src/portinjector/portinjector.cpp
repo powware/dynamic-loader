@@ -6,6 +6,8 @@
 
 #include <pfw.h>
 
+#include "pipe.h"
+
 // class Module
 // {
 // public:
@@ -365,59 +367,100 @@ bool LoadModule(HANDLE process_handle, std::wstring dll_path)
 // 	loader_thread.Join();
 // }
 
-int main(int argc, char *argv[])
+int wmain(int argc, wchar_t *argv[])
 {
 	if (!pfw::SetDebugPrivileges())
 	{
 		std::cout << "SetDebugPrivileges failed. You may need to restart with admin privileges.\n";
 	}
 
-	std::optional<DWORD> process_id{};
-	std::optional<std::wstring> dll_path{};
-	std::optional<bool> load{};
-	for (int i = 0; i < argc; ++i)
-	{
-		std::string arg = argv[i];
-		if (arg == "--pid" && i + 1 < argc)
-		{
-			process_id = std::stoul(argv[++i]);
-		}
-		else if (arg == "--dll" && i + 1 < argc)
-		{
-			std::string arg2(argv[++i]);
-			dll_path = std::wstring();
-			dll_path->resize(arg2.size());
-			std::mbstowcs(dll_path->data(), arg2.c_str(), arg2.size());
-		}
-		else if (arg == "--load")
-		{
-			load = true;
-		}
-		else if (arg == "--unload")
-		{
-			load = false;
-		}
-	}
+	auto executable_name = std::filesystem::path(argv[0]).filename();
 
-	if (!process_id || !dll_path || !load)
+	auto pipe = Pipe::Create(Pipe::Client, executable_name.wstring());
+	if (!pipe)
 	{
 		return EXIT_FAILURE;
 	}
 
-	auto process_handle = pfw::OpenProcess(*process_id);
-	if (!process_handle)
+	while (true)
 	{
-		return EXIT_FAILURE;
+		auto message = pipe->Receive();
+		if (!message)
+		{
+			continue;
+		}
+
+		auto operation = Operation::Load;
+
+		switch (operation)
+		{
+		case Operation::Load:
+		{
+			auto process_id = 12;
+			auto process_handle = pfw::OpenProcess(process_id);
+			if (!process_handle)
+			{
+				return EXIT_FAILURE;
+			}
+
+			LoadModule((*process_handle).get(), *dll_path);
+
+			pipe->Send(L"")
+		}
+		break;
+		case Operation::Unload:
+		{
+		}
+		break;
+		}
 	}
 
-	if (*load)
-	{
-		return LoadModule((*process_handle).get(), *dll_path) ? EXIT_SUCCESS : EXIT_FAILURE;
-	}
-	else
-	{
-		// UnloadModule((*process_handle).get(), *dll_path);
-	}
+	// std::optional<DWORD> process_id{};
+	// std::optional<std::wstring> dll_path{};
+	// std::optional<bool> load{};
+	// for (int i = 0; i < argc; ++i)
+	// {
+	// 	std::string arg = argv[i];
+	// 	if (arg == "--pid" && i + 1 < argc)
+	// 	{
+	// 		process_id = std::stoul(argv[++i]);
+	// 	}
+	// 	else if (arg == "--dll" && i + 1 < argc)
+	// 	{
+	// 		std::string arg2(argv[++i]);
+	// 		dll_path = std::wstring();
+	// 		dll_path->resize(arg2.size());
+	// 		std::mbstowcs(dll_path->data(), arg2.c_str(), arg2.size());
+	// 	}
+	// 	else if (arg == "--load")
+	// 	{
+	// 		load = true;
+	// 	}
+	// 	else if (arg == "--unload")
+	// 	{
+	// 		load = false;
+	// 	}
+	// }
+
+	// if (!process_id || !dll_path || !load)
+	// {
+	// 	return EXIT_FAILURE;
+	// }
+
+	// auto process_handle = pfw::OpenProcess(*process_id);
+	// if (!process_handle)
+	// {
+	// 	return EXIT_FAILURE;
+	// }
+
+	// if (*load)
+	// {
+	// 	return LoadModule((*process_handle).get(), *dll_path) ? EXIT_SUCCESS : EXIT_FAILURE;
+	// }
+	// else
+	// {
+	// 	// UnloadModule((*process_handle).get(), *dll_path);
+	// }
 
 	// Process ac_client("ac_client.exe");
 	// LibraryModule assaultcube(ac_client, "C:\\Users\\powware\\repos\\assaultcube\\build\\Release\\assaultcube.dll");

@@ -6,13 +6,14 @@
 #include <string>
 
 #include "ui_mainwindow.h"
+#include "coms.h"
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    MainWindow(QString application_directory, QWidget *parent = nullptr);
+    MainWindow(InjectorInterface *injector, QWidget *parent = nullptr);
     ~MainWindow();
 
 private slots:
@@ -25,8 +26,7 @@ private:
     Ui_MainWindow *ui_;
     QMessageBox error_message_;
     QMessageBox success_message_;
-    std::wstring portinjector32_;
-    std::wstring portinjector64_;
+    InjectorInterface *injector_;
 };
 
 #endif // __MAINWINDOW_H__
