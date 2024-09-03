@@ -34,7 +34,9 @@ if(TARGET_BITNESS STREQUAL "64")
     ${PROJECT_SOURCE_DIR}/src/portforwarder/portforwarder.cpp
     ${PROJECT_SOURCE_DIR}/src/portforwarder/mainwindow.cpp
     ${PROJECT_SOURCE_DIR}/src/portforwarder/processselector.cpp
-    ${PROJECT_SOURCE_DIR}/src/portforwarder/mainwindow.ui)
+    ${PROJECT_SOURCE_DIR}/src/portforwarder/coms.cpp
+    ${PROJECT_SOURCE_DIR}/src/portforwarder/mainwindow.ui
+    ${PROJECT_SOURCE_DIR}/src/pipe.cpp)
 
   target_include_directories(portforwarder PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
@@ -45,12 +47,15 @@ elseif()
   message(STATUS "Only building injector.")
 endif()
 
-add_executable(portinjector
-               ${PROJECT_SOURCE_DIR}/src/portinjector/portinjector.cpp)
+add_executable(
+  portinjector ${PROJECT_SOURCE_DIR}/src/portinjector/portinjector.cpp
+               ${PROJECT_SOURCE_DIR}/src/pipe.cpp)
 
 set(INJECTOR_NAME "portinjector${TARGET_BITNESS}")
 
 set_target_properties(portinjector PROPERTIES OUTPUT_NAME ${INJECTOR_NAME})
+
+target_include_directories(portinjector PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 find_package(pfw REQUIRED)
 
