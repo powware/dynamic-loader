@@ -10,8 +10,8 @@
 
 #include "processselector.h"
 
-MainWindow::MainWindow(InjectorInterface *injector, QWidget *parent)
-    : injector_(injector), QMainWindow(parent), ui_(new Ui_MainWindow), error_message_(this)
+MainWindow::MainWindow(LoaderInterface *loader, QWidget *parent)
+    : loader_(loader), QMainWindow(parent), ui_(new Ui_MainWindow), error_message_(this)
 {
     ui_->setupUi(this);
     error_message_.setWindowTitle("Error");
@@ -163,122 +163,68 @@ void MainWindow::PopulatePopup()
 
 void MainWindow::Inject()
 {
-    // auto process_id = pfw::GetProcessId(ui_->process_selector->currentText().toStdWString());
-    // if (!process_id)
-    // {
-    //     error_message_.setText("GetProcessId failed.");
-    //     error_message_.show();
-    //     return;
-    // }
+    auto process_id = pfw::GetProcessId(ui_->process_selector->currentText().toStdWString());
+    if (!process_id)
+    {
+        error_message_.setText("GetProcessId failed.");
+        error_message_.show();
+        return;
+    }
 
-    // auto process = pfw::OpenProcess(*process_id, PROCESS_QUERY_LIMITED_INFORMATION);
-    // if (!process)
-    // {
-    //     error_message_.setText("OpenProcess failed.");
-    //     error_message_.show();
-    //     return;
-    // }
+    std::wstring dll = ui_->file_selector->text().toStdWString();
 
-    // BOOL is_32bit;
-    // if (!IsWow64Process(*process, &is_32bit))
-    // {
-    //     error_message_.setText("IsWow64Process failed.");
-    //     error_message_.show();
-    //     return;
-    // }
+    if (ui_->dll_copy->isChecked())
+    {
+        auto temp_directory = std::filesystem::temp_directory_path();
 
-    // std::wstring dll_path = ui_->file_selector->text().toStdWString();
+        auto uuid = []() -> std::optional<std::wstring>
+        {
+            UUID uuid;
+            RPC_WSTR uuid_string;
+            if (UuidCreate(&uuid))
+            {
+                return std::nullopt;
+            }
+            if (UuidToStringW(&uuid, &uuid_string))
+            {
+                return std::nullopt;
+            }
+            std::wstring result(reinterpret_cast<wchar_t *>(uuid_string));
+            RpcStringFreeW(&uuid_string);
+            return result;
+        }();
+        if (!uuid)
+        {
+            error_message_.setText("UUID creation failed.");
+            error_message_.show();
+            return;
+        }
 
-    // if (ui_->dll_copy->isChecked())
-    // {
-    //     auto temp_directory_path = std::filesystem::temp_directory_path();
+        temp_directory = temp_directory / (*uuid + L"_dynamic-linker");
 
-    //     auto uuid = []() -> std::optional<std::wstring>
-    //     {
-    //         UUID uuid;
-    //         RPC_WSTR uuid_string;
-    //         if (UuidCreate(&uuid))
-    //         {
-    //             return std::nullopt;
-    //         }
-    //         if (UuidToStringW(&uuid, &uuid_string))
-    //         {
-    //             return std::nullopt;
-    //         }
-    //         std::wstring result(reinterpret_cast<wchar_t *>(uuid_string));
-    //         RpcStringFreeW(&uuid_string);
-    //         return result;
-    //     }();
-    //     if (!uuid)
-    //     {
-    //         error_message_.setText("UUID creation failed.");
-    //         error_message_.show();
-    //         return;
-    //     }
+        try
+        {
+            std::filesystem::create_directory(temp_directory);
+            auto temp_dll = temp_directory / std::filesystem::path(dll).filename();
+            std::filesystem::copy_file(dll, temp_dll);
+            dll = temp_dll.wstring();
+        }
+        catch (std::exception &)
+        {
+            error_message_.setText("Creating dll copy failed.");
+            error_message_.show();
+            return;
+        }
+    }
 
-    //     temp_directory_path = temp_directory_path / (*uuid + L"_portforwader");
+    auto handle = loader_->Load(*process_id, dll);
+    if (!handle)
+    {
+        error_message_.setText("Injection failed.");
+        error_message_.show();
+        return;
+    }
 
-    //     try
-    //     {
-    //         std::filesystem::create_directory(temp_directory_path);
-    //         auto temp_path = temp_directory_path / std::filesystem::path(dll_path).filename();
-    //         std::filesystem::copy_file(dll_path, temp_path);
-    //         dll_path = temp_path.wstring();
-    //     }
-    //     catch (std::exception &)
-    //     {
-    //         error_message_.setText("Creating dll copy failed.");
-    //         error_message_.show();
-    //         return;
-    //     }
-    // }
-
-    // auto command_line = std::format(L"--pid {} --dll {} --load", *process_id, dll_path);
-
-    // struct RemoteProcess
-    // {
-    //     pfw::HandleGuard process;
-    //     pfw::HandleGuard thread;
-    // };
-
-    // const auto &selected_portinjector = is_32bit ? portinjector32_ : portinjector64_;
-
-    // auto injector_process = [&selected_portinjector, &command_line]() -> std::optional<RemoteProcess>
-    // {
-    //     STARTUPINFO startup_info = {.cb = sizeof(startup_info)};
-    //     PROCESS_INFORMATION process_info;
-    //     if (!CreateProcess(selected_portinjector.c_str(), command_line.data(), nullptr, nullptr, false, CREATE_NO_WINDOW, nullptr, nullptr, &startup_info, &process_info))
-    //     {
-    //         return std::nullopt;
-    //     }
-    //     auto process = pfw::HandleGuard::Create(process_info.hProcess);
-    //     auto thread = pfw::HandleGuard::Create(process_info.hThread);
-    //     if (!process || !thread)
-    //     {
-    //         return std::nullopt;
-    //     }
-    //     return RemoteProcess(std::move(*process), std::move(*thread));
-    // }();
-    // if (!injector_process)
-    // {
-    //     error_message_.setText("CreateProcess failed.");
-    // }
-    // WaitForSingleObject(injector_process->process, INFINITE);
-
-    // DWORD exit_code;
-    // if (!GetExitCodeProcess(injector_process->process, &exit_code))
-    // {
-    //     error_message_.setText("GetExitCodeProcess failed.");
-    //     error_message_.show();
-    // }
-
-    // if (exit_code)
-    // {
-    //     error_message_.setText("Injection failed.");
-    //     error_message_.show();
-    //     return;
-    // }
-
-    // success_message_.setText("Injection successfull.");
-    // success_message_.show();
+    success_message_.setText("Injection successfull.");
+    success_message_.show();
 }
