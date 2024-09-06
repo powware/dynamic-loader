@@ -374,9 +374,7 @@ int wmain(int argc, wchar_t *argv[])
 		std::cout << "SetDebugPrivileges failed. You may need to restart with admin privileges.\n";
 	}
 
-	auto executable_name = std::filesystem::path(argv[0]).filename();
-
-	auto pipe = Pipe::Create(Pipe::Client, executable_name.wstring());
+	auto pipe = Pipe::Connect();
 	if (!pipe)
 	{
 		return EXIT_FAILURE;
@@ -403,9 +401,9 @@ int wmain(int argc, wchar_t *argv[])
 				return EXIT_FAILURE;
 			}
 
-			LoadModule((*process_handle).get(), *dll_path);
+			// LoadModule((*process_handle).get(), *dll_path);
 
-			pipe->Send(L"")
+			pipe->Send(L"success");
 		}
 		break;
 		case Operation::Unload:

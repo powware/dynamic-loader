@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 project(
-  portforwarder
+  dynmaic-loader
   VERSION 1.0
   LANGUAGES CXX)
 
@@ -30,33 +30,32 @@ if(TARGET_BITNESS STREQUAL "64")
   qt_standard_project_setup()
 
   qt_add_executable(
-    portforwarder
-    ${PROJECT_SOURCE_DIR}/src/portforwarder/portforwarder.cpp
-    ${PROJECT_SOURCE_DIR}/src/portforwarder/mainwindow.cpp
-    ${PROJECT_SOURCE_DIR}/src/portforwarder/processselector.cpp
-    ${PROJECT_SOURCE_DIR}/src/portforwarder/coms.cpp
-    ${PROJECT_SOURCE_DIR}/src/portforwarder/mainwindow.ui
+    forwarder
+    ${PROJECT_SOURCE_DIR}/src/forwarder/forwarder.cpp
+    ${PROJECT_SOURCE_DIR}/src/forwarder/mainwindow.cpp
+    ${PROJECT_SOURCE_DIR}/src/forwarder/processselector.cpp
+    ${PROJECT_SOURCE_DIR}/src/forwarder/coms.cpp
+    ${PROJECT_SOURCE_DIR}/src/forwarder/mainwindow.ui
     ${PROJECT_SOURCE_DIR}/src/pipe.cpp)
 
-  target_include_directories(portforwarder PRIVATE ${PROJECT_SOURCE_DIR}/src)
+  target_include_directories(forwarder PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
-  target_link_libraries(portforwarder PRIVATE Qt6::Widgets pfw::pfw Rpcrt4)
+  target_link_libraries(forwarder PRIVATE Qt6::Widgets pfw::pfw Rpcrt4)
 
-  set_target_properties(portforwarder PROPERTIES WIN32_EXECUTABLE ON)
+  set_target_properties(forwarder PROPERTIES WIN32_EXECUTABLE ON)
 elseif()
-  message(STATUS "Only building injector.")
+  message(STATUS "Only building loader.")
 endif()
 
-add_executable(
-  portinjector ${PROJECT_SOURCE_DIR}/src/portinjector/portinjector.cpp
-               ${PROJECT_SOURCE_DIR}/src/pipe.cpp)
+add_executable(loader ${PROJECT_SOURCE_DIR}/src/loader/loader.cpp
+                      ${PROJECT_SOURCE_DIR}/src/pipe.cpp)
 
-set(INJECTOR_NAME "portinjector${TARGET_BITNESS}")
+set(LOADER_NAME "loader${TARGET_BITNESS}")
 
-set_target_properties(portinjector PROPERTIES OUTPUT_NAME ${INJECTOR_NAME})
+set_target_properties(loader PROPERTIES OUTPUT_NAME ${LOADER_NAME})
 
-target_include_directories(portinjector PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_include_directories(loader PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 find_package(pfw REQUIRED)
 
-target_link_libraries(portinjector PRIVATE pfw::pfw)
+target_link_libraries(loader PRIVATE pfw::pfw)

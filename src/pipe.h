@@ -12,51 +12,20 @@ enum class Operation
 class Pipe
 {
 public:
-    enum Type
-    {
-        Server,
-        Client
-    };
+    class Server;
+    class Client;
 
     static const DWORD kMaxMessageSize;
 
-    static std::optional<Pipe> Create(Type type, std::wstring name)
-    {
-        auto pipe_name = L"\\\\.\\pipe\\" + name;
+    static std::unique_ptr<Server> Create(std::wstring name);
 
-        auto pipe = pfw::HandleGuard::Create([=]()
-                                             {
-            if (type == Type::Server)
-            {
-                return CreateNamedPipe(pipe_name.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, 1, kMaxMessageSize, kMaxMessageSize, 0, nullptr);
-            }
-            else
-            {
-                return CreateFile(pipe_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-            } }());
-        if (!pipe)
-        {
-            return std::nullopt;
-        }
-
-        return std::make_optional<Pipe>(Pipe(type, std::move(*pipe)));
-    }
-
-    bool WaitForClient()
-    {
-        if (type_ != Server)
-        {
-            return false;
-        }
-
-        return ConnectNamedPipe(pipe_, nullptr);
-    }
+    static std::unique_ptr<Client> Connect();
 
     bool Send(std::wstring message)
     {
         const auto message_size = DWORD((message.size()) * sizeof(wchar_t));
         DWORD written;
-        if (!WriteFile(pipe_, message.c_str(), message_size, &written, NULL) || written != message_size)
+        if (!WriteFile(handle_, message.c_str(), message_size, &written, NULL) || written != message_size)
         {
             return false;
         }
@@ -68,7 +37,7 @@ public:
     {
         std::wstring message(kMaxMessageSize / sizeof(wchar_t), L'\0');
         DWORD read;
-        if (!ReadFile(pipe_, message.data(), DWORD(message.size()), &read, nullptr) || read == 0)
+        if (!ReadFile(handle_, message.data(), DWORD(message.size()), &read, nullptr) || read == 0)
         {
             return std::nullopt;
         }
@@ -79,8 +48,53 @@ public:
     }
 
 private:
-    pfw::HandleGuard pipe_;
-    Type type_;
+    pfw::HandleGuard handle_;
 
-    Pipe(Type type, pfw::HandleGuard &&pipe) : type_(type), pipe_(std::forward<pfw::HandleGuard>(pipe)) {}
+    template <typename Type>
+    Pipe(Type handle) : handle_(std::forward<Type>(handle)) {}
+};
+
+class Pipe::Server
+{
+public:
+    bool Send(std::wstring message)
+    {
+        return pipe_.Send(message);
+    }
+
+    std::optional<std::wstring> Receive()
+    {
+        return pipe_.Receive();
+    }
+
+    bool WaitForClient()
+    {
+        return ConnectNamedPipe(pipe_.handle_, nullptr);
+    }
+
+    template <typename Type>
+    Server(Type &&pipe) : pipe_(std::forward<Type>(pipe)) {}
+
+private:
+    Pipe pipe_;
+};
+
+class Pipe::Client
+{
+public:
+    bool Send(std::wstring message)
+    {
+        return Send(message);
+    }
+
+    std::optional<std::wstring> Receive()
+    {
+        return pipe_.Receive();
+    }
+
+    template <typename Type>
+    Client(Type &&pipe) : pipe_(std::forward<Type>(pipe)) {}
+
+private:
+    Pipe pipe_;
 };

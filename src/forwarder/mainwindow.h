@@ -13,7 +13,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    MainWindow(InjectorInterface *injector, QWidget *parent = nullptr);
+    MainWindow(LoaderInterface *loader, QWidget *parent = nullptr);
     ~MainWindow();
 
 private slots:
@@ -26,7 +26,7 @@ private:
     Ui_MainWindow *ui_;
     QMessageBox error_message_;
     QMessageBox success_message_;
-    InjectorInterface *injector_;
+    LoaderInterface *loader_;
 };
 
 #endif // __MAINWINDOW_H__
