@@ -34,9 +34,7 @@ if(TARGET_BITNESS STREQUAL "64")
     ${PROJECT_SOURCE_DIR}/src/forwarder/forwarder.cpp
     ${PROJECT_SOURCE_DIR}/src/forwarder/mainwindow.cpp
     ${PROJECT_SOURCE_DIR}/src/forwarder/processselector.cpp
-    ${PROJECT_SOURCE_DIR}/src/forwarder/coms.cpp
-    ${PROJECT_SOURCE_DIR}/src/forwarder/mainwindow.ui
-    ${PROJECT_SOURCE_DIR}/src/pipe.cpp)
+    ${PROJECT_SOURCE_DIR}/src/forwarder/mainwindow.ui)
 
   target_include_directories(forwarder PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
@@ -47,8 +45,7 @@ elseif()
   message(STATUS "Only building loader.")
 endif()
 
-add_executable(loader ${PROJECT_SOURCE_DIR}/src/loader/loader.cpp
-                      ${PROJECT_SOURCE_DIR}/src/pipe.cpp)
+add_executable(loader ${PROJECT_SOURCE_DIR}/src/loader/loader.cpp)
 
 set(LOADER_NAME "loader${TARGET_BITNESS}")
 

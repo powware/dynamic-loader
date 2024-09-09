@@ -14,7 +14,7 @@
    <enum>Qt::FocusPolicy::ClickFocus</enum>
   </property>
   <property name="windowTitle">
-   <string>Portforwarder</string>
+   <string>Dynamic Loader</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">

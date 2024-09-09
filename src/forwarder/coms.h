@@ -6,6 +6,8 @@
 #include <optional>
 #include <array>
 #include <iostream>
+#include <span>
+#include <spanstream>
 
 #include <Windows.h>
 
@@ -18,83 +20,111 @@ class Loader
 public:
     static std::unique_ptr<Loader> Create(std::wstring executable)
     {
-        auto executable_name = std::filesystem::path(executable).filename();
+        SECURITY_ATTRIBUTES security_attributes{.nLength = sizeof(security_attributes), .bInheritHandle = true};
 
-        auto pipe = Pipe::Create(executable_name);
-        if (!pipe)
+        HANDLE read_pipe_read_handle;
+        HANDLE read_pipe_write_handle;
+
+        if (!CreatePipe(&read_pipe_read_handle, &read_pipe_write_handle, &security_attributes, 0))
         {
             return nullptr;
         }
 
-        STARTUPINFO startup_info = {.cb = sizeof(startup_info)};
-        PROCESS_INFORMATION process_info;
-        if (!CreateProcess(executable.c_str(), nullptr, nullptr, nullptr, false, CREATE_NO_WINDOW, nullptr, nullptr, &startup_info, &process_info))
+        if (!SetHandleInformation(read_pipe_read_handle, HANDLE_FLAG_INHERIT, 0))
         {
             return nullptr;
         }
 
-        auto process = pfw::HandleGuard::Create(process_info.hProcess);
-        auto thread = pfw::HandleGuard::Create(process_info.hThread);
-        if (!process || !thread)
+        HANDLE write_pipe_read_handle;
+        HANDLE write_pipe_write_handle;
+
+        if (!CreatePipe(&write_pipe_read_handle, &write_pipe_write_handle, &security_attributes, 0))
         {
             return nullptr;
-        };
-
-        // if (!pipe->WaitForClient())
-        // {
-        //     return nullptr;
-        // }
-
-        pipe->Send(L"hello!");
-
-        auto message = pipe->Receive();
-        if (message)
-        {
-            std::wcout << *message << std::endl;
         }
 
-        return std::unique_ptr<Loader>(new Loader(std::move(*process), std::move(*thread), std::move(pipe)));
+        if (!SetHandleInformation(write_pipe_write_handle, HANDLE_FLAG_INHERIT, 0))
+        {
+            return nullptr;
+        }
+
+        STARTUPINFO startup_info = {.cb = sizeof(startup_info), .dwFlags = STARTF_USESTDHANDLES, .hStdInput = write_pipe_read_handle, .hStdOutput = read_pipe_write_handle};
+        auto result = pfw::CreateProcess(executable, &security_attributes, startup_info);
+        if (!result)
+        {
+            return nullptr;
+        }
+
+        CloseHandle(read_pipe_write_handle);
+        CloseHandle(write_pipe_read_handle);
+
+        auto read_handle = pfw::Handle::Create(read_pipe_read_handle);
+        auto write_handle = pfw::Handle::Create(write_pipe_write_handle);
+
+        std::unique_ptr<Pipe> pipe(new Pipe(std::move(*read_handle), std::move(*write_handle)));
+
+        return std::unique_ptr<Loader>(new Loader(std::move(std::get<0>(*result)), std::move(std::get<1>(*result)), std::move(pipe)));
     }
 
-    std::optional<HANDLE> Load(DWORD process_id, std::wstring dll)
+    std::optional<HMODULE> Load(DWORD process_id, std::wstring dll)
     {
-        return std::nullopt;
+        ByteOutStream ostream;
+        ostream << RemoteProcedure::Load;
+        ostream << process_id;
+        ostream << dll;
+
+        if (!pipe_->Send(ostream.buffer_))
+        {
+            return std::nullopt;
+        }
+
+        auto ibuffer = pipe_->Receive();
+        if (!ibuffer)
+        {
+            return std::nullopt;
+        }
+
+        ByteInStream istream(*ibuffer);
+
+        std::optional<HMODULE> module;
+        istream >> module;
+
+        return module;
     }
 
     bool Unload(DWORD process_id, HANDLE module)
     {
+        // return *CallRemoteProcedure<1, bool>(process_id, module);
         return false;
     }
 
+    // template <uint8_t Id, typename ReturnType, typename... Args>
+    // std::optional<ReturnType> CallRemoteProcedure(Args &&...args)
+    // {
+    //     std::vector<std::byte> buffer;
+    //     std::basic_ospanstream<std::byte> stream(buffer);
+
+    //     stream << Id;
+    //     stream << uint32_t(wstring.size());
+
+    //     for (auto wc : wstring)
+    //     {
+    //         stream << wc;
+    //     }
+
+    //     return std::nullopt;
+    // }
+
     ~Loader()
     {
-        // WaitForSingleObject(process_, INFINITE);
-
-        // DWORD exit_code;
-        // if (!GetExitCodeProcess(loader_process->process, &exit_code))
-        // {
-        //     error_message_.setText("GetExitCodeProcess failed.");
-        //     error_message_.show();
-        // }
-
-        // if (exit_code)
-        // {
-        //     error_message_.setText("Injection failed.");
-        //     error_message_.show();
-        //     return;
-        // }
-
-        TerminateProcess(process_, 0);
     }
 
-    // Loader(Loader &&rhs) : process_(std::move(rhs.process_)), thread_(std::move(rhs.thread_)), pipe_() {}
-
 private:
-    pfw::HandleGuard process_;
-    pfw::HandleGuard thread_;
-    std::unique_ptr<Pipe::Server> pipe_;
+    pfw::Handle process_;
+    pfw::Handle thread_;
+    std::unique_ptr<Pipe> pipe_;
 
-    Loader(pfw::HandleGuard &&process, pfw::HandleGuard &&thread, std::unique_ptr<Pipe::Server> &&pipe) : process_(std::forward<pfw::HandleGuard>(process)), thread_(std::forward<pfw::HandleGuard>(thread)), pipe_(std::forward<std::unique_ptr<Pipe::Server>>(pipe)) {}
+    Loader(pfw::Handle &&process, pfw::Handle &&thread, std::unique_ptr<Pipe> &&pipe) : process_(std::forward<pfw::Handle>(process)), thread_(std::forward<pfw::Handle>(thread)), pipe_(std::forward<std::unique_ptr<Pipe>>(pipe)) {}
 };
 
 class LoaderInterface
@@ -102,12 +132,12 @@ class LoaderInterface
 public:
     static std::unique_ptr<LoaderInterface> Create(std::wstring loader_directory)
     {
-        auto executable = loader_directory + L"/loader";
+        auto executable = std::move(loader_directory) + L"/loader";
 
-        auto loader32 = Loader::Create(executable + L"32.exe");
+        auto loader32 = Loader::Create(executable + L"32.exe"); // TODO remove
         if (!loader32)
         {
-            // return nullptr; // TODO remove
+            return nullptr;
         }
 
         auto loader64 = Loader::Create(executable + L"64.exe");
@@ -119,7 +149,7 @@ public:
         return std::unique_ptr<LoaderInterface>(new LoaderInterface(std::move(loader32), std::move(loader64)));
     }
 
-    std::optional<HANDLE> Load(DWORD process_id, std::wstring dll)
+    std::optional<HMODULE> Load(DWORD process_id, std::wstring dll)
     {
         auto loader = GetLoader(process_id);
         if (!loader)
@@ -130,7 +160,7 @@ public:
         return (*loader)->Load(process_id, dll);
     }
 
-    bool Unload(DWORD process_id, HANDLE module)
+    bool Unload(DWORD process_id, HMODULE module)
     {
         auto loader = GetLoader(process_id);
         if (!loader)

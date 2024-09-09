@@ -217,8 +217,8 @@ void MainWindow::Inject()
         }
     }
 
-    auto handle = loader_->Load(*process_id, dll);
-    if (!handle)
+    auto module = loader_->Load(*process_id, dll);
+    if (!module)
     {
         error_message_.setText("Injection failed.");
         error_message_.show();
