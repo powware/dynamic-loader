@@ -24,6 +24,8 @@ message(STATUS "Target: x${TARGET_BITNESS}")
 
 find_package(pfw REQUIRED)
 
+add_executable(loader ${PROJECT_SOURCE_DIR}/src/loader/loader.cpp)
+
 if(TARGET_BITNESS STREQUAL "64")
   find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
@@ -41,15 +43,10 @@ if(TARGET_BITNESS STREQUAL "64")
   target_link_libraries(forwarder PRIVATE Qt6::Widgets pfw::pfw Rpcrt4)
 
   set_target_properties(forwarder PROPERTIES WIN32_EXECUTABLE ON)
-elseif()
-  message(STATUS "Only building loader.")
+else()
+  message(STATUS "Only building loader")
+  set_target_properties(loader PROPERTIES OUTPUT_NAME "loader32")
 endif()
-
-add_executable(loader ${PROJECT_SOURCE_DIR}/src/loader/loader.cpp)
-
-set(LOADER_NAME "loader${TARGET_BITNESS}")
-
-set_target_properties(loader PROPERTIES OUTPUT_NAME ${LOADER_NAME})
 
 target_include_directories(loader PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
