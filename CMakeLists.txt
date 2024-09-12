@@ -26,6 +26,8 @@ find_package(pfw REQUIRED)
 
 add_executable(loader ${PROJECT_SOURCE_DIR}/src/loader/loader.cpp)
 
+add_library(loadable SHARED ${PROJECT_SOURCE_DIR}/example/loadable.cpp)
+
 if(TARGET_BITNESS STREQUAL "64")
   find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
@@ -34,9 +36,9 @@ if(TARGET_BITNESS STREQUAL "64")
   qt_add_executable(
     forwarder
     ${PROJECT_SOURCE_DIR}/src/forwarder/forwarder.cpp
-    ${PROJECT_SOURCE_DIR}/src/forwarder/mainwindow.cpp
-    ${PROJECT_SOURCE_DIR}/src/forwarder/processselector.cpp
-    ${PROJECT_SOURCE_DIR}/src/forwarder/mainwindow.ui)
+    ${PROJECT_SOURCE_DIR}/src/forwarder/ui/mainwindow.cpp
+    ${PROJECT_SOURCE_DIR}/src/forwarder/ui/processselector.cpp
+    ${PROJECT_SOURCE_DIR}/src/forwarder/ui/mainwindow.ui)
 
   target_include_directories(forwarder PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
@@ -46,6 +48,7 @@ if(TARGET_BITNESS STREQUAL "64")
 else()
   message(STATUS "Only building loader")
   set_target_properties(loader PROPERTIES OUTPUT_NAME "loader32")
+  set_target_properties(loadable PROPERTIES OUTPUT_NAME "loadable32")
 endif()
 
 target_include_directories(loader PRIVATE ${PROJECT_SOURCE_DIR}/src)

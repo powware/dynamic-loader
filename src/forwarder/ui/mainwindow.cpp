@@ -9,13 +9,20 @@
 #include <pfw.h>
 
 #include "processselector.h"
+#include "load_event.h"
+#include "unload_event.h"
 
 MainWindow::MainWindow(LoaderInterface *loader, QWidget *parent)
     : loader_(loader), QMainWindow(parent), ui_(new Ui_MainWindow), error_message_(this)
 {
     ui_->setupUi(this);
+    ui_->load->setEnabled(false);
+    ui_->load->setStyleSheet("QPushButton { color: grey; background-color: lightgrey; }");
+    ui_->unload->setEnabled(false);
+    ui_->unload->setStyleSheet("QPushButton { color: grey; background-color: lightgrey; }");
+
     error_message_.setWindowTitle("Error");
-    error_message_.setModal(true);
+    error_message_.setModal(false);
     error_message_.setIcon(QMessageBox::Critical);
     auto check_box = error_message_.findChild<QCheckBox *>();
     if (check_box)
@@ -25,19 +32,67 @@ MainWindow::MainWindow(LoaderInterface *loader, QWidget *parent)
 
     success_message_.setWindowTitle("Success");
     success_message_.setIcon(QMessageBox::Information);
-    success_message_.setModal(true);
+    success_message_.setModal(false);
 
     connect(ui_->file_selector, &QLineEdit::textChanged, this, &MainWindow::UpdateTooltip);
     connect(ui_->file_browser, &QToolButton::clicked, this, &MainWindow::BrowseFiles);
     connect(ui_->process_selector, &ProcessSelector::popup, this, &MainWindow::PopulatePopup);
-    connect(ui_->inject_button, &QPushButton::clicked, this, &MainWindow::Inject);
+    connect(ui_->load, &QPushButton::clicked, this, &MainWindow::Load);
+    connect(ui_->unload, &QPushButton::clicked, this, &MainWindow::Unload);
 
     PopulatePopup();
+
+    loader_->RegisterLoadCallback([this](std::optional<HMODULE> module)
+                                  { QCoreApplication::postEvent(this, new LoadEvent(module)); });
+    loader_->RegisterUnloadCallback([this](bool success)
+                                    { QCoreApplication::postEvent(this, new UnloadEvent(success)); });
+    // loader_->RegisterCloseProcessCallback();
 }
 
 MainWindow::~MainWindow()
 {
     delete ui_;
+}
+
+bool MainWindow::event(QEvent *event)
+{
+    if (event->type() == LoadEventType)
+    {
+        loading_ = false;
+        auto load_event = static_cast<LoadEvent *>(event);
+        if (!load_event->module_)
+        {
+            error_message_.setText("Load failed.");
+            error_message_.show();
+        }
+        else
+        {
+            ui_->module_list->addTopLevelItem(new QTreeWidgetItem({"test"}));
+            success_message_.setText("Load successfull.");
+            success_message_.show();
+        }
+
+        return true;
+    }
+    else if (event->type() == UnloadEventType)
+    {
+        unloading_ = false;
+        auto unload_event = static_cast<UnloadEvent *>(event);
+        if (!unload_event->success_)
+        {
+            error_message_.setText("Unload failed.");
+            error_message_.show();
+        }
+        else
+        {
+            success_message_.setText("Unload successfull.");
+            success_message_.show();
+        }
+
+        return true;
+    }
+
+    return QMainWindow::event(event);
 }
 
 std::optional<QIcon> QIconFromProcessId(DWORD process_id)
@@ -94,9 +149,20 @@ std::optional<QIcon> QIconFromProcessId(DWORD process_id)
     return QIcon(QPixmap::fromImage(image));
 }
 
-void MainWindow::UpdateTooltip(const QString &n)
+void MainWindow::UpdateTooltip(const QString &text)
 {
-    ui_->file_selector->setToolTip(n);
+    ui_->file_selector->setToolTip(text);
+
+    if (text.isEmpty())
+    {
+        ui_->load->setEnabled(false);
+        ui_->load->setStyleSheet("QPushButton { color: grey; background-color: lightgrey; }");
+    }
+    else
+    {
+        ui_->load->setEnabled(true);
+        ui_->load->setStyleSheet("");
+    }
 }
 
 void MainWindow::BrowseFiles()
@@ -133,7 +199,6 @@ void MainWindow::PopulatePopup()
         QString process_name(QString::fromWCharArray(current.szExeFile));
         if (process_name.toLower().endsWith(".exe"))
         {
-
             processes.push_back({std::move(process_name), QIconFromProcessId(current.th32ProcessID)});
         }
     } while (Process32Next(process_snapshot, &current));
@@ -161,8 +226,13 @@ void MainWindow::PopulatePopup()
     }
 }
 
-void MainWindow::Inject()
+void MainWindow::Load()
 {
+    if (loading_)
+    {
+        return;
+    }
+
     auto process_id = pfw::GetProcessId(ui_->process_selector->currentText().toStdWString());
     if (!process_id)
     {
@@ -172,6 +242,12 @@ void MainWindow::Inject()
     }
 
     std::wstring dll = ui_->file_selector->text().toStdWString();
+    if (dll.empty())
+    {
+        error_message_.setText("No DLL entered.");
+        error_message_.show();
+        return;
+    }
 
     if (ui_->dll_copy->isChecked())
     {
@@ -217,14 +293,17 @@ void MainWindow::Inject()
         }
     }
 
-    auto module = loader_->Load(*process_id, dll);
-    if (!module)
+    loading_ = true;
+    loader_->Load(*process_id, dll);
+}
+
+void MainWindow::Unload()
+{
+    if (unloading_)
     {
-        error_message_.setText("Injection failed.");
-        error_message_.show();
         return;
     }
 
-    success_message_.setText("Injection successfull.");
-    success_message_.show();
+    unloading_ = true;
+    loader_->Unload(12, HMODULE(12));
 }

@@ -3,10 +3,16 @@
 #include <sstream>
 #include <string>
 #include <cstdlib>
+#include <thread>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
 
 #include <pfw.h>
 
 #include "pipe.h"
+#include "serialization.h"
 
 // class Module
 // {
@@ -368,6 +374,117 @@ std::optional<HMODULE> LoadModule(HANDLE process_handle, std::wstring dll)
 // 	loader_thread.Join();
 // }
 
+// class Process
+// {
+// 	std::optional<HANDLE> OpenProcess
+// 	{
+
+// 	}
+// };
+
+class Handler
+{
+public:
+	static std::unique_ptr<Handler> Create()
+	{
+		auto read_handle = pfw::Handle::Create(GetStdHandle(STD_INPUT_HANDLE));
+		if (!read_handle)
+		{
+			return nullptr;
+		}
+
+		auto write_handle = pfw::Handle::Create(GetStdHandle(STD_OUTPUT_HANDLE));
+		if (!write_handle)
+		{
+			return nullptr;
+		}
+
+		return std::unique_ptr<Handler>(new Handler(std::move(*read_handle), std::move(*write_handle)));
+	}
+
+	void WriteThread(std::unique_ptr<WritePipe> pipe, std::stop_token stoken)
+	{
+		while (!stoken.stop_requested())
+		{
+			std::unique_lock lock(mutex_);
+			cv_.wait(lock, stoken, [this, stoken]
+					 { return queue_.size(); });
+			if (stoken.stop_requested())
+			{
+				return;
+			}
+
+			do
+			{
+				pipe->Write(queue_.front());
+				queue_.pop();
+			} while (queue_.size());
+		}
+	}
+
+	void Read()
+	{
+		while (auto buffer = read_pipe_->Read())
+		{
+			Deserializer deserializer(*buffer); // ByteInStream istream(std::move(*buffer));
+			RemoteProcedure rpc;
+			deserializer.deserialize(rpc);
+
+			switch (rpc)
+			{
+			case RemoteProcedure::Load:
+			{
+
+				DWORD process_id;
+				deserializer.deserialize(process_id);
+				std::wstring dll;
+				deserializer.deserialize(dll);
+				auto module = Load(process_id, std::move(dll));
+				Serializer serializer;
+				Write(serializer.serialize(rpc).serialize(module).buffer());
+			}
+			break;
+			case RemoteProcedure::Unload:
+			{
+			}
+			break;
+			default:
+			{
+			}
+			break;
+			}
+		}
+	}
+
+	std::optional<HMODULE> Load(DWORD process_id, std::wstring dll)
+	{
+
+		auto process_handle = pfw::OpenProcess(process_id);
+		if (!process_handle)
+		{
+			return std::nullopt;
+		}
+
+		return LoadModule(*process_handle, dll);
+	}
+
+	template <typename Buffer>
+	void Write(Buffer &&arg)
+	{
+		std::scoped_lock lock(mutex_);
+		queue_.push(std::forward<Buffer>(arg));
+		cv_.notify_one();
+	}
+
+private:
+	std::unique_ptr<ReadPipe> read_pipe_;
+	std::mutex mutex_;
+	std::condition_variable_any cv_;
+	std::queue<std::vector<std::byte>> queue_;
+	std::jthread thread_; // destroys before the variables used inside of it, also destroys write_pipe before read_pipe
+	Handler(pfw::Handle &&read_handle, pfw::Handle &&write_handle) : read_pipe_(std::make_unique<ReadPipe>(std::forward<pfw::Handle>(read_handle))), thread_(std::bind_front(&Handler::WriteThread, this, std::make_unique<WritePipe>(std::forward<pfw::Handle>(write_handle)))) {}
+};
+
 int wmain()
 {
 	if (!pfw::SetDebugPrivileges())
@@ -375,54 +492,12 @@ int wmain()
 		// std::cout << "SetDebugPrivileges failed. You may need to restart with admin privileges.\n";
 	}
 
-	auto pipe = Pipe::ConnectToParent();
-	if (!pipe)
+	auto handler = Handler::Create();
+	if (!handler)
 	{
 		return EXIT_FAILURE;
 	}
-
-	while (auto message = pipe->Receive())
-	{
-		ByteInStream istream(std::move(*message));
-		RemoteProcedure remote_procedure;
-		istream >> remote_procedure;
-
-		switch (remote_procedure)
-		{
-		case RemoteProcedure::Load:
-		{
-			DWORD process_id;
-			istream >> process_id;
-			std::wstring dll;
-			istream >> dll;
-
-			auto process_handle = pfw::OpenProcess(process_id);
-			if (!process_handle)
-			{
-				ByteOutStream ostream;
-				ostream << std::nullopt;
-
-				pipe->Send(ostream.buffer_);
-			}
-
-			auto module = LoadModule(*process_handle, dll);
-
-			ByteOutStream ostream;
-			ostream << module;
-
-			pipe->Send(ostream.buffer_);
-		}
-		break;
-		case RemoteProcedure::Unload:
-		{
-		}
-		break;
-		default:
-		{
-		}
-		break;
-		}
-	}
+	handler->Read();
 
 	return EXIT_SUCCESS;
 }
