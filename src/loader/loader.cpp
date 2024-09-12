@@ -429,6 +429,8 @@ public:
 			Deserializer deserializer(*buffer); // ByteInStream istream(std::move(*buffer));
 			RemoteProcedure rpc;
 			deserializer.deserialize(rpc);
+			uint8_t seq;
+			deserializer.deserialize(seq);
 
 			switch (rpc)
 			{
@@ -441,7 +443,7 @@ public:
 				deserializer.deserialize(dll);
 				auto module = Load(process_id, std::move(dll));
 				Serializer serializer;
-				Write(serializer.serialize(rpc).serialize(module).buffer());
+				Write(serializer.serialize(rpc).serialize(seq).serialize(module).buffer());
 			}
 			break;
 			case RemoteProcedure::Unload:

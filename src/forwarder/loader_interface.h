@@ -11,6 +11,8 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <unordered_map>
+#include <variant>
 
 #include <Windows.h>
 
@@ -68,15 +70,15 @@ public:
         return std::unique_ptr<Loader>(new Loader(std::move(*process), std::make_unique<ReadPipe>(std::move(*read_handle)), std::make_unique<WritePipe>(std::move(*write_handle))));
     }
 
-    bool Load(DWORD process_id, std::wstring dll)
+    bool Load(uint8_t seq, DWORD process_id, std::wstring dll)
     {
-        auto buffer = Serializer().serialize(RemoteProcedure::Load).serialize(process_id).serialize(dll).buffer();
+        auto buffer = Serializer().serialize(RemoteProcedure::Load).serialize(seq).serialize(process_id).serialize(dll).buffer();
         return write_pipe_->Write(buffer);
     }
 
-    bool Unload(DWORD process_id, HANDLE module)
+    bool Unload(uint8_t seq, DWORD process_id, HANDLE module)
     {
-        auto buffer = Serializer().serialize(RemoteProcedure::Unload).serialize(process_id).serialize(module).buffer();
+        auto buffer = Serializer().serialize(RemoteProcedure::Unload).serialize(seq).serialize(process_id).serialize(module).buffer();
         return false;
     }
 
@@ -143,36 +145,36 @@ public:
         return std::unique_ptr<LoaderInterface>(new LoaderInterface(std::move(loader32), std::move(loader)));
     }
 
-    void Load(DWORD process_id, std::wstring dll)
+    void Load(DWORD process_id, std::wstring dll, std::function<void(std::optional<HMODULE>)> callback)
     {
+        auto seq = InsertCallback(std::move(callback));
         auto loader = GetLoader(process_id);
         if (!loader)
         {
+            InvokeCallback<std::optional<HMODULE>>(seq, std::nullopt);
             return;
         }
 
-        (*loader)->Load(process_id, dll);
+        if (!loader->Load(seq, process_id, dll))
+        {
+            InvokeCallback<std::optional<HMODULE>>(seq, std::nullopt);
+        }
     }
 
-    void Unload(DWORD process_id, HMODULE module)
+    void Unload(DWORD process_id, HMODULE module, std::function<void(bool)> callback)
     {
+        auto seq = InsertCallback(std::move(callback));
         auto loader = GetLoader(process_id);
         if (!loader)
         {
+            InvokeCallback(seq, false);
             return;
         }
 
-        (*loader)->Unload(process_id, module);
-    }
-
-    void RegisterLoadCallback(std::function<void(std::optional<HMODULE>)> callback)
-    {
-        load_callback_ = callback;
-    }
-
-    void RegisterUnloadCallback(std::function<void(bool)> callback)
-    {
-        unload_callback_ = callback;
+        (!loader->Unload(seq, process_id, module));
+        {
+            InvokeCallback(seq, false);
+        }
     }
 
     void RegisterCloseProcessCallback(std::function<void(DWORD)> callback)
@@ -191,21 +193,23 @@ private:
     {
         Deserializer deserializer(buffer);
         RemoteProcedure rpc;
+        uint8_t seq;
         deserializer.deserialize(rpc);
+        deserializer.deserialize(seq);
         switch (rpc)
         {
         case RemoteProcedure::Load:
         {
-            std::optional<HMODULE> t;
-            deserializer.deserialize(t);
-            load_callback_(t);
+            std::optional<HMODULE> module;
+            deserializer.deserialize(module);
+            InvokeCallback(seq, module);
         }
         break;
         case RemoteProcedure::Unload:
         {
             bool success;
             deserializer.deserialize(success);
-            unload_callback_(success);
+            InvokeCallback(seq, success);
         }
         break;
         default:
@@ -215,13 +219,12 @@ private:
         }
     }
 
-    std::optional<Loader *>
-    GetLoader(DWORD process_id)
+    Loader *GetLoader(DWORD process_id)
     {
         auto is_32bit = pfw::IsProcess32bit(process_id);
         if (!is_32bit)
         {
-            return std::nullopt;
+            return nullptr;
         }
 
         if (*is_32bit)
@@ -232,12 +235,30 @@ private:
         return loader_.get();
     }
 
-    std::function<void(std::optional<HMODULE>)> load_callback_;
-    std::function<void(bool)> unload_callback_;
+    std::uint8_t InsertCallback(std::variant<std::function<void(std::optional<HMODULE>)>, std::function<void(bool)>> callback)
+    {
+        std::scoped_lock lock(callback_mutex_);
+        callbacks_[sequence_number_] = callback;
+        return sequence_number_++;
+    }
+
+    template <typename... Args>
+    void InvokeCallback(uint8_t id, Args... args)
+    {
+        std::scoped_lock lock(callback_mutex_);
+        auto iterator = callbacks_.find(id);
+        std::get<std::function<void(Args...)>>(iterator->second)(args...);
+        callbacks_.erase(iterator);
+    }
+
     std::function<void(DWORD)> close_process_callback_;
 
     std::unique_ptr<Loader> loader_;
     std::unique_ptr<Loader> loader32_;
+
+    std::mutex callback_mutex_;
+    std::uint8_t sequence_number_ = 0;
+    std::unordered_map<std::uint8_t, std::variant<std::function<void(std::optional<HMODULE>)>, std::function<void(bool)>>> callbacks_;
 };
 
 #endif // __LOADER_INTERFACE_H__

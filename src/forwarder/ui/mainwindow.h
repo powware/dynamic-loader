@@ -19,11 +19,12 @@ public:
     bool event(QEvent *event) override;
 
 private slots:
-    void UpdateTooltip(const QString &text);
-    void BrowseFiles();
-    void PopulatePopup();
-    void Load();
-    void Unload();
+    void FileSelectorTextChanged(const QString &text);
+    void FileBrowserClicked();
+    void ProcessSelectorPopup();
+    void LoadClicked();
+    void UnloadClicked();
+    void ModuleListCurrentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous);
 
 private:
     Ui_MainWindow *ui_;

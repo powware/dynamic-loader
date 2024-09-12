@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>592</width>
-    <height>411</height>
+    <width>837</width>
+    <height>387</height>
    </rect>
   </property>
   <property name="focusPolicy">
@@ -16,31 +16,22 @@
   <property name="windowTitle">
    <string>Dynamic Loader</string>
   </property>
-  <widget class="QWidget" name="centralwidget">
+  <widget class="QWidget" name="main_widget">
    <layout class="QHBoxLayout" name="horizontalLayout">
     <item>
-     <widget class="QSplitter" name="splitter">
-      <property name="enabled">
-       <bool>true</bool>
-      </property>
+     <widget class="QSplitter" name="main_splitter">
       <property name="orientation">
        <enum>Qt::Orientation::Horizontal</enum>
       </property>
-      <property name="opaqueResize">
-       <bool>true</bool>
-      </property>
-      <property name="childrenCollapsible">
-       <bool>false</bool>
-      </property>
-      <widget class="QWidget" name="widget" native="true">
-       <layout class="QGridLayout" name="gridLayout">
-        <item row="0" column="0">
-         <widget class="QSplitter" name="splitter_2">
+      <widget class="QWidget" name="load_widget" native="true">
+       <layout class="QVBoxLayout" name="verticalLayout">
+        <item>
+         <widget class="QSplitter" name="load_splitter">
           <property name="orientation">
            <enum>Qt::Orientation::Vertical</enum>
           </property>
           <widget class="QWidget" name="layoutWidget">
-           <layout class="QGridLayout" name="gridLayout_2">
+           <layout class="QGridLayout" name="load_selectors_layout">
             <property name="sizeConstraint">
              <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
             </property>
@@ -55,7 +46,7 @@
              </widget>
             </item>
             <item row="1" column="0" alignment="Qt::AlignmentFlag::AlignHCenter">
-             <widget class="QLabel" name="label">
+             <widget class="QLabel" name="dll_label">
               <property name="text">
                <string>DLL</string>
               </property>
@@ -65,7 +56,7 @@
              <widget class="QLineEdit" name="file_selector"/>
             </item>
             <item row="0" column="0" alignment="Qt::AlignmentFlag::AlignHCenter">
-             <widget class="QLabel" name="label_2">
+             <widget class="QLabel" name="process_label">
               <property name="text">
                <string>Process</string>
               </property>
@@ -90,8 +81,48 @@
            </layout>
           </widget>
           <widget class="QWidget" name="layoutWidget">
-           <layout class="QGridLayout" name="gridLayout_3">
-            <item row="4" column="0" alignment="Qt::AlignmentFlag::AlignHCenter">
+           <layout class="QGridLayout" name="load_buttons_layout">
+            <item row="0" column="0" colspan="2" alignment="Qt::AlignmentFlag::AlignHCenter">
+             <widget class="QCheckBox" name="manual_mapping">
+              <property name="text">
+               <string>Manual Mapping</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1" alignment="Qt::AlignmentFlag::AlignHCenter">
+             <widget class="QPushButton" name="unload">
+              <property name="enabled">
+               <bool>true</bool>
+              </property>
+              <property name="text">
+               <string>Unload</string>
+              </property>
+              <property name="checkable">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0" colspan="2" alignment="Qt::AlignmentFlag::AlignHCenter">
+             <widget class="QCheckBox" name="automatic_reinjection">
+              <property name="text">
+               <string>Automatic Re-Injection</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0" colspan="2" alignment="Qt::AlignmentFlag::AlignHCenter">
+             <widget class="QCheckBox" name="dll_copy">
+              <property name="text">
+               <string>DLL Copy</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0" alignment="Qt::AlignmentFlag::AlignHCenter">
              <widget class="QPushButton" name="load">
               <property name="enabled">
                <bool>true</bool>
@@ -107,96 +138,48 @@
               </property>
              </widget>
             </item>
-            <item row="4" column="1" alignment="Qt::AlignmentFlag::AlignHCenter">
-             <widget class="QPushButton" name="unload">
-              <property name="enabled">
-               <bool>true</bool>
-              </property>
-              <property name="text">
-               <string>Unload</string>
-              </property>
-              <property name="checkable">
-               <bool>false</bool>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="0" colspan="2" alignment="Qt::AlignmentFlag::AlignHCenter">
-             <widget class="QCheckBox" name="dll_copy">
-              <property name="text">
-               <string>DLL Copy</string>
-              </property>
-              <property name="checked">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="0" colspan="2" alignment="Qt::AlignmentFlag::AlignHCenter">
-             <widget class="QCheckBox" name="automatic_reinjection">
-              <property name="text">
-               <string>Automatic Re-Injection</string>
-              </property>
-              <property name="checked">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="0" colspan="2" alignment="Qt::AlignmentFlag::AlignHCenter">
-             <widget class="QCheckBox" name="checkBox_2">
-              <property name="text">
-               <string>Manual Mapping</string>
-              </property>
-             </widget>
-            </item>
            </layout>
           </widget>
          </widget>
         </item>
        </layout>
       </widget>
-      <widget class="QTreeWidget" name="module_list">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <column>
-        <property name="text">
-         <string>Name</string>
-        </property>
-       </column>
-       <column>
-        <property name="text">
-         <string>Type</string>
-        </property>
-       </column>
-       <column>
-        <property name="text">
-         <string>Architecture</string>
-        </property>
-       </column>
-       <item>
-        <property name="text">
-         <string>ac_client.exe</string>
-        </property>
-        <property name="text">
-         <string>process</string>
-        </property>
-        <property name="text">
-         <string>x64</string>
-        </property>
-        <item>
-         <property name="text">
-          <string>assaultcube.dll</string>
-         </property>
-         <property name="text">
-          <string>module</string>
-         </property>
-         <property name="text">
-          <string/>
-         </property>
+      <widget class="QWidget" name="gridLayoutWidget">
+       <layout class="QGridLayout" name="module_list_layout">
+        <item row="0" column="0">
+         <widget class="QTreeWidget" name="module_list">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="itemsExpandable">
+           <bool>true</bool>
+          </property>
+          <column>
+           <property name="text">
+            <string>Name</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Id</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Details</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Type</string>
+           </property>
+          </column>
+         </widget>
         </item>
-       </item>
+       </layout>
       </widget>
      </widget>
     </item>
@@ -207,7 +190,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>592</width>
+     <width>837</width>
      <height>33</height>
     </rect>
    </property>

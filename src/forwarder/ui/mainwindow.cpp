@@ -34,19 +34,14 @@ MainWindow::MainWindow(LoaderInterface *loader, QWidget *parent)
     success_message_.setIcon(QMessageBox::Information);
     success_message_.setModal(false);
 
-    connect(ui_->file_selector, &QLineEdit::textChanged, this, &MainWindow::UpdateTooltip);
-    connect(ui_->file_browser, &QToolButton::clicked, this, &MainWindow::BrowseFiles);
-    connect(ui_->process_selector, &ProcessSelector::popup, this, &MainWindow::PopulatePopup);
-    connect(ui_->load, &QPushButton::clicked, this, &MainWindow::Load);
-    connect(ui_->unload, &QPushButton::clicked, this, &MainWindow::Unload);
+    connect(ui_->file_selector, &QLineEdit::textChanged, this, &MainWindow::FileSelectorTextChanged);
+    connect(ui_->file_browser, &QToolButton::clicked, this, &MainWindow::FileBrowserClicked);
+    connect(ui_->process_selector, &ProcessSelector::popup, this, &MainWindow::ProcessSelectorPopup);
+    connect(ui_->load, &QPushButton::clicked, this, &MainWindow::LoadClicked);
+    connect(ui_->unload, &QPushButton::clicked, this, &MainWindow::UnloadClicked);
+    connect(ui_->module_list, &QTreeWidget::currentItemChanged, this, &MainWindow::ModuleListCurrentItemChanged);
 
-    PopulatePopup();
-
-    loader_->RegisterLoadCallback([this](std::optional<HMODULE> module)
-                                  { QCoreApplication::postEvent(this, new LoadEvent(module)); });
-    loader_->RegisterUnloadCallback([this](bool success)
-                                    { QCoreApplication::postEvent(this, new UnloadEvent(success)); });
-    // loader_->RegisterCloseProcessCallback();
+    ProcessSelectorPopup();
 }
 
 MainWindow::~MainWindow()
@@ -60,17 +55,43 @@ bool MainWindow::event(QEvent *event)
     {
         loading_ = false;
         auto load_event = static_cast<LoadEvent *>(event);
-        if (!load_event->module_)
+        if (!load_event->module)
         {
             error_message_.setText("Load failed.");
             error_message_.show();
+            return true;
+        }
+        auto result = ui_->module_list->findItems(QString::number(load_event->process_id), Qt::MatchExactly, 1);
+        QTreeWidgetItem *process;
+        if (result.isEmpty())
+        {
+            auto is_32bit = pfw::IsProcess32bit(load_event->process_id);
+            if (!is_32bit)
+            {
+                error_message_.setText("IDKKKKKKKKKKKKKKKK");
+                error_message_.show();
+                return true;
+            }
+
+            process = new QTreeWidgetItem({QString::fromStdWString(load_event->process),
+                                           QString::number(load_event->process_id),
+                                           *is_32bit ? "x32" : "x64",
+                                           "Process"});
+            ui_->module_list->addTopLevelItem(process);
         }
         else
         {
-            ui_->module_list->addTopLevelItem(new QTreeWidgetItem({"test"}));
-            success_message_.setText("Load successfull.");
-            success_message_.show();
+            process = result[0];
         }
+
+        process->addChild(new QTreeWidgetItem({QString::fromStdWString(load_event->dll),
+                                               "0x" + QString::number(reinterpret_cast<std::uint64_t>(*load_event->module), 16),
+                                               "", "Module"}));
+
+        process->setExpanded(true);
+
+        success_message_.setText("Load successfull.");
+        success_message_.show();
 
         return true;
     }
@@ -78,16 +99,16 @@ bool MainWindow::event(QEvent *event)
     {
         unloading_ = false;
         auto unload_event = static_cast<UnloadEvent *>(event);
-        if (!unload_event->success_)
+        if (!unload_event->success)
         {
             error_message_.setText("Unload failed.");
             error_message_.show();
+
+            return true;
         }
-        else
-        {
-            success_message_.setText("Unload successfull.");
-            success_message_.show();
-        }
+
+        success_message_.setText("Unload successfull.");
+        success_message_.show();
 
         return true;
     }
@@ -98,7 +119,7 @@ bool MainWindow::event(QEvent *event)
 std::optional<QIcon> QIconFromProcessId(DWORD process_id)
 {
 
-    auto exe_path = pfw::ExecutablePathFromProcessId(process_id);
+    auto exe_path = pfw::GetExecutablePathFromProcessId(process_id);
     if (!exe_path)
     {
         return std::nullopt;
@@ -149,7 +170,7 @@ std::optional<QIcon> QIconFromProcessId(DWORD process_id)
     return QIcon(QPixmap::fromImage(image));
 }
 
-void MainWindow::UpdateTooltip(const QString &text)
+void MainWindow::FileSelectorTextChanged(const QString &text)
 {
     ui_->file_selector->setToolTip(text);
 
@@ -165,12 +186,12 @@ void MainWindow::UpdateTooltip(const QString &text)
     }
 }
 
-void MainWindow::BrowseFiles()
+void MainWindow::FileBrowserClicked()
 {
     ui_->file_selector->setText(QFileDialog::getOpenFileName(this, "Select DLL", "", "(*.dll)"));
 }
 
-void MainWindow::PopulatePopup()
+void MainWindow::ProcessSelectorPopup()
 {
     struct Process
     {
@@ -226,12 +247,14 @@ void MainWindow::PopulatePopup()
     }
 }
 
-void MainWindow::Load()
+void MainWindow::LoadClicked()
 {
     if (loading_)
     {
         return;
     }
+
+    auto process = ui_->process_selector->currentText().toStdWString();
 
     auto process_id = pfw::GetProcessId(ui_->process_selector->currentText().toStdWString());
     if (!process_id)
@@ -245,6 +268,18 @@ void MainWindow::Load()
     if (dll.empty())
     {
         error_message_.setText("No DLL entered.");
+        error_message_.show();
+        return;
+    }
+
+    std::wstring dll_name;
+    try
+    {
+        dll_name = std::filesystem::path(dll).filename().wstring();
+    }
+    catch (std::exception &)
+    {
+        error_message_.setText("Can't get filename.");
         error_message_.show();
         return;
     }
@@ -281,7 +316,7 @@ void MainWindow::Load()
         try
         {
             std::filesystem::create_directory(temp_directory);
-            auto temp_dll = temp_directory / std::filesystem::path(dll).filename();
+            auto temp_dll = temp_directory / dll_name;
             std::filesystem::copy_file(dll, temp_dll);
             dll = temp_dll.wstring();
         }
@@ -294,16 +329,38 @@ void MainWindow::Load()
     }
 
     loading_ = true;
-    loader_->Load(*process_id, dll);
+    loader_->Load(*process_id, dll, [=, this](std::optional<HMODULE> module)
+                  { QCoreApplication::postEvent(this, new LoadEvent(process, *process_id, dll_name, module)); });
 }
 
-void MainWindow::Unload()
+void MainWindow::UnloadClicked()
 {
     if (unloading_)
     {
         return;
     }
 
+    auto item = ui_->module_list->currentItem();
+    auto module = item->text(1);
+    auto module_handle = reinterpret_cast<HMODULE>(module.toULongLong());
+    auto process = item->parent()->text(1);
+    auto process_id = DWORD(process.toUInt());
+
     unloading_ = true;
-    loader_->Unload(12, HMODULE(12));
+    loader_->Unload(process_id, module_handle, [=, this](bool success)
+                    { QCoreApplication::postEvent(this, new UnloadEvent(process, module, success)); });
+}
+
+void MainWindow::ModuleListCurrentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous)
+{
+    if (current->text(3) == "Module")
+    {
+        ui_->unload->setEnabled(true);
+        ui_->unload->setStyleSheet("");
+    }
+    else
+    {
+        ui_->unload->setEnabled(false);
+        ui_->unload->setStyleSheet("QPushButton { color: grey; background-color: lightgrey; }");
+    }
 }

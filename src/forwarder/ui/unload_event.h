@@ -10,8 +10,10 @@ const QEvent::Type UnloadEventType = static_cast<QEvent::Type>(QEvent::registerE
 class UnloadEvent : public QEvent
 {
 public:
-    UnloadEvent(bool success) : QEvent(UnloadEventType), success_(success) {}
-    bool success_;
+    UnloadEvent(QString process_id, QString module, bool success) : QEvent(UnloadEventType), process_id(process_id), module(module), success(success) {}
+    QString process_id;
+    QString module;
+    bool success;
 };
 
 #endif // __UNLOAD_EVENT_H__
