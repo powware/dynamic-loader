@@ -10,8 +10,9 @@ const QEvent::Type LoadEventType = static_cast<QEvent::Type>(QEvent::registerEve
 class LoadEvent : public QEvent
 {
 public:
-    LoadEvent(std::wstring process, DWORD process_id, std::wstring dll, std::optional<HMODULE> module) : QEvent(LoadEventType), process(process), process_id(process_id), dll(dll), module(module) {}
-    std::wstring process;
+    LoadEvent(QIcon process_icon, QString process, DWORD process_id, std::wstring dll, std::optional<HMODULE> module) : QEvent(LoadEventType), process_icon(std::move(process_icon)), process(std::move(process)), process_id(process_id), dll(std::move(dll)), module(module) {}
+    QIcon process_icon;
+    QString process;
     DWORD process_id;
     std::wstring dll;
     std::optional<HMODULE> module;

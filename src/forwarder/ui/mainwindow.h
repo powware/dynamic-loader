@@ -32,6 +32,9 @@ private:
     QMessageBox success_message_;
     LoaderInterface *loader_;
 
+    std::optional<QIcon> dll_icon_;
+    std::optional<QIcon> default_process_icon_;
+
     bool loading_ = false;
     bool unloading_ = false;
 };

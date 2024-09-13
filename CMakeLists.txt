@@ -26,6 +26,7 @@ find_package(pfw REQUIRED)
 
 add_executable(loader ${PROJECT_SOURCE_DIR}/src/loader/loader.cpp)
 
+add_executable(process ${PROJECT_SOURCE_DIR}/example/process.cpp)
 add_library(loadable SHARED ${PROJECT_SOURCE_DIR}/example/loadable.cpp)
 
 if(TARGET_BITNESS STREQUAL "64")

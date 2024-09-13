@@ -8,8 +8,9 @@
 
 #include <pfw.h>
 
-#include "processselector.h"
+#include "icon_helpers.h"
 #include "load_event.h"
+#include "processselector.h"
 #include "unload_event.h"
 
 MainWindow::MainWindow(LoaderInterface *loader, QWidget *parent)
@@ -42,6 +43,9 @@ MainWindow::MainWindow(LoaderInterface *loader, QWidget *parent)
     connect(ui_->module_list, &QTreeWidget::currentItemChanged, this, &MainWindow::ModuleListCurrentItemChanged);
 
     ProcessSelectorPopup();
+
+    dll_icon_ = LoadIconFromImageres(67);             // Computer\HKEY_CLASSES_ROOT\dllfile\DefaultIcon
+    default_process_icon_ = LoadIconFromImageres(15); // manually looked in a file, but might change from sys to sys
 }
 
 MainWindow::~MainWindow()
@@ -61,9 +65,15 @@ bool MainWindow::event(QEvent *event)
             error_message_.show();
             return true;
         }
-        auto result = ui_->module_list->findItems(QString::number(load_event->process_id), Qt::MatchExactly, 1);
-        QTreeWidgetItem *process;
-        if (result.isEmpty())
+
+        const auto module = "0x" + QString::number(reinterpret_cast<std::uint64_t>(*load_event->module), 16);
+
+        auto process = [=, this]
+        {
+            auto results = ui_->module_list->findItems(QString::number(load_event->process_id), Qt::MatchExactly, 1);
+            return !results.isEmpty() ? results[0] : nullptr;
+        }();
+        if (!process)
         {
             auto is_32bit = pfw::IsProcess32bit(load_event->process_id);
             if (!is_32bit)
@@ -73,25 +83,41 @@ bool MainWindow::event(QEvent *event)
                 return true;
             }
 
-            process = new QTreeWidgetItem({QString::fromStdWString(load_event->process),
+            process = new QTreeWidgetItem({load_event->process,
                                            QString::number(load_event->process_id),
                                            *is_32bit ? "x32" : "x64",
                                            "Process"});
+            if (load_event->process_icon.isNull() && default_process_icon_)
+            {
+                process->setIcon(0, *default_process_icon_);
+            }
+            else
+            {
+                process->setIcon(0, load_event->process_icon);
+            }
             ui_->module_list->addTopLevelItem(process);
+            process->setExpanded(true);
         }
         else
         {
-            process = result[0];
+            const auto count = process->childCount();
+            for (int i = 0; i < count; ++i)
+            {
+                if (process->child(i)->text(1) == module)
+                {
+                    return true;
+                }
+            }
         }
 
-        process->addChild(new QTreeWidgetItem({QString::fromStdWString(load_event->dll),
-                                               "0x" + QString::number(reinterpret_cast<std::uint64_t>(*load_event->module), 16),
-                                               "", "Module"}));
-
-        process->setExpanded(true);
-
-        success_message_.setText("Load successfull.");
-        success_message_.show();
+        auto child = new QTreeWidgetItem({QString::fromStdWString(load_event->dll),
+                                          module,
+                                          "", "Module"});
+        process->addChild(child);
+        if (dll_icon_)
+        {
+            child->setIcon(0, *dll_icon_);
+        }
 
         return true;
     }
@@ -107,67 +133,10 @@ bool MainWindow::event(QEvent *event)
             return true;
         }
 
-        success_message_.setText("Unload successfull.");
-        success_message_.show();
-
         return true;
     }
 
     return QMainWindow::event(event);
-}
-
-std::optional<QIcon> QIconFromProcessId(DWORD process_id)
-{
-
-    auto exe_path = pfw::GetExecutablePathFromProcessId(process_id);
-    if (!exe_path)
-    {
-        return std::nullopt;
-    }
-
-    SHFILEINFO shFileInfo;
-    if (!SHGetFileInfo(exe_path->c_str(), 0, &shFileInfo, sizeof(shFileInfo), SHGFI_ICON | SHGFI_LARGEICON))
-    {
-        return std::nullopt;
-    }
-
-    ICONINFO iconInfo;
-    if (!GetIconInfo(shFileInfo.hIcon, &iconInfo))
-    {
-        return std::nullopt;
-    }
-
-    BITMAP bm;
-    if (!GetObject(iconInfo.hbmColor, sizeof(BITMAP), &bm))
-    {
-        return std::nullopt;
-    }
-
-    int width = bm.bmWidth;
-    int height = bm.bmHeight;
-
-    QImage image(width, height, QImage::Format_ARGB32);
-    image.fill(Qt::transparent);
-
-    HDC hdc = CreateCompatibleDC(nullptr);
-    SelectObject(hdc, iconInfo.hbmColor);
-
-    BITMAPINFOHEADER bi;
-    memset(&bi, 0, sizeof(bi));
-    bi.biSize = sizeof(BITMAPINFOHEADER);
-    bi.biWidth = width;
-    bi.biHeight = -height; // Negative indicates a top-down DIB
-    bi.biPlanes = 1;
-    bi.biBitCount = 32;
-    bi.biCompression = BI_RGB;
-
-    GetDIBits(hdc, iconInfo.hbmColor, 0, height, image.bits(), reinterpret_cast<BITMAPINFO *>(&bi), DIB_RGB_COLORS);
-
-    DeleteObject(iconInfo.hbmColor);
-    DeleteObject(iconInfo.hbmMask);
-    DeleteDC(hdc);
-
-    return QIcon(QPixmap::fromImage(image));
 }
 
 void MainWindow::FileSelectorTextChanged(const QString &text)
@@ -254,9 +223,12 @@ void MainWindow::LoadClicked()
         return;
     }
 
-    auto process = ui_->process_selector->currentText().toStdWString();
+    auto index = ui_->process_selector->currentIndex();
 
-    auto process_id = pfw::GetProcessId(ui_->process_selector->currentText().toStdWString());
+    auto process = ui_->process_selector->itemText(index);
+    auto process_icon = ui_->process_selector->itemIcon(index);
+
+    auto process_id = pfw::GetProcessId(process.toStdWString());
     if (!process_id)
     {
         error_message_.setText("GetProcessId failed.");
@@ -279,7 +251,7 @@ void MainWindow::LoadClicked()
     }
     catch (std::exception &)
     {
-        error_message_.setText("Can't get filename.");
+        error_message_.setText("Reading file name failed.");
         error_message_.show();
         return;
     }
@@ -288,22 +260,7 @@ void MainWindow::LoadClicked()
     {
         auto temp_directory = std::filesystem::temp_directory_path();
 
-        auto uuid = []() -> std::optional<std::wstring>
-        {
-            UUID uuid;
-            RPC_WSTR uuid_string;
-            if (UuidCreate(&uuid))
-            {
-                return std::nullopt;
-            }
-            if (UuidToStringW(&uuid, &uuid_string))
-            {
-                return std::nullopt;
-            }
-            std::wstring result(reinterpret_cast<wchar_t *>(uuid_string));
-            RpcStringFreeW(&uuid_string);
-            return result;
-        }();
+        auto uuid = pfw::GenerateUUID();
         if (!uuid)
         {
             error_message_.setText("UUID creation failed.");
@@ -311,7 +268,7 @@ void MainWindow::LoadClicked()
             return;
         }
 
-        temp_directory = temp_directory / (*uuid + L"_dynamic-linker");
+        temp_directory = temp_directory / (*uuid + L"_dynamic-loader");
 
         try
         {
@@ -329,8 +286,8 @@ void MainWindow::LoadClicked()
     }
 
     loading_ = true;
-    loader_->Load(*process_id, dll, [=, this](std::optional<HMODULE> module)
-                  { QCoreApplication::postEvent(this, new LoadEvent(process, *process_id, dll_name, module)); });
+    loader_->Load(*process_id, dll, [this, process_icon = std::move(process_icon), process = std::move(process), process_id = *process_id, dll_name = std::move(dll_name)](std::optional<HMODULE> module) mutable
+                  { QCoreApplication::postEvent(this, new LoadEvent(std::move(process_icon), std::move(process), process_id, std::move(dll_name), module)); });
 }
 
 void MainWindow::UnloadClicked()

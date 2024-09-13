@@ -130,17 +130,8 @@ public:
         auto executable = std::filesystem::path(process).parent_path().wstring() + L"\\loader";
 
         auto loader = Loader::Create(executable + L".exe");
-        if (!loader)
-        {
-            return nullptr;
-        }
 
-        // auto loader32 = Loader::Create(std::move(executable) + L"32.exe");
-        // if (!loader32)
-        // {
-        //     return nullptr;
-        // }
-        std::unique_ptr<Loader> loader32(nullptr);
+        auto loader32 = Loader::Create(std::move(executable) + L"32.exe");
 
         return std::unique_ptr<LoaderInterface>(new LoaderInterface(std::move(loader32), std::move(loader)));
     }
@@ -185,8 +176,15 @@ public:
 private:
     LoaderInterface(std::unique_ptr<Loader> &&loader32, std::unique_ptr<Loader> &&loader) : loader32_(std::forward<std::unique_ptr<Loader>>(loader32)), loader_(std::forward<std::unique_ptr<Loader>>(loader))
     {
-        loader_->RegisterReadCallback(std::bind_front(&LoaderInterface::ReadCallback, this));
-        // loader32_->RegisterReadCallback(std::bind_front(&LoaderInterface::ReadCallback, this));
+        if (loader_)
+        {
+            loader_->RegisterReadCallback(std::bind_front(&LoaderInterface::ReadCallback, this));
+        }
+
+        if (loader32_)
+        {
+            loader32_->RegisterReadCallback(std::bind_front(&LoaderInterface::ReadCallback, this));
+        }
     }
 
     void ReadCallback(std::span<std::byte> buffer)
