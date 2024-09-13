@@ -78,9 +78,9 @@ bool MainWindow::event(QEvent *event)
             auto is_32bit = pfw::IsProcess32bit(load_event->process_id);
             if (!is_32bit)
             {
-                error_message_.setText("IDKKKKKKKKKKKKKKKK");
+                error_message_.setText("process deded >_<");
                 error_message_.show();
-                return true;
+                true;
             }
 
             process = new QTreeWidgetItem({load_event->process,
@@ -131,6 +131,31 @@ bool MainWindow::event(QEvent *event)
             error_message_.show();
 
             return true;
+        }
+
+        auto results = ui_->module_list->findItems(unload_event->process_id, Qt::MatchExactly, 1);
+        if (results.isEmpty())
+        {
+            error_message_.setText("we shouldnt come here");
+            error_message_.show();
+            return true;
+        }
+
+        const auto process = results[0];
+
+        for (int i = 0; i < process->childCount(); ++i)
+        {
+            auto child = process->child(i);
+            if (child->text(1) == unload_event->module)
+            {
+                process->removeChild(child); // invalidates for loop
+                break;
+            }
+        }
+
+        if (process->childCount() == 0)
+        {
+            ui_->module_list->takeTopLevelItem(ui_->module_list->indexOfTopLevelItem(process));
         }
 
         return true;
@@ -299,7 +324,7 @@ void MainWindow::UnloadClicked()
 
     auto item = ui_->module_list->currentItem();
     auto module = item->text(1);
-    auto module_handle = reinterpret_cast<HMODULE>(module.toULongLong());
+    auto module_handle = reinterpret_cast<HMODULE>(module.toULongLong(nullptr, 16));
     auto process = item->parent()->text(1);
     auto process_id = DWORD(process.toUInt());
 
@@ -310,6 +335,11 @@ void MainWindow::UnloadClicked()
 
 void MainWindow::ModuleListCurrentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem * /*previous*/)
 {
+    if (!current)
+    {
+        return;
+    }
+
     if (current->text(3) == "Module")
     {
         ui_->unload->setEnabled(true);

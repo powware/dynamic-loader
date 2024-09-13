@@ -77,24 +77,22 @@ public:
     bool Unload(uint8_t seq, DWORD process_id, HANDLE module)
     {
         auto buffer = Serializer().serialize(RemoteProcedure::Unload).serialize(seq).serialize(process_id).serialize(module).buffer();
-        return false;
+        return write_pipe_->Write(buffer);
     }
 
-    void RegisterReadCallback(std::function<void(std::span<std::byte>)> Read_callback)
+    void RegisterReadCallback(std::function<void(std::span<std::byte>)> read_callback)
     {
-        Read_callback_ = Read_callback;
+        read_callback_ = read_callback;
     }
 
 private:
     pfw::Process process_;
 
-    // std::mutex mutex_;
-    // std::condition_variable_any cv_;
     std::jthread thread_;
 
     std::unique_ptr<WritePipe> write_pipe_; // destory before read thread
 
-    std::function<void(std::span<std::byte>)> Read_callback_;
+    std::function<void(std::span<std::byte>)> read_callback_;
     bool Write(std::span<std::byte> buffer)
     {
         return write_pipe_->Write(buffer);
@@ -106,7 +104,7 @@ private:
     {
         while (auto buffer = read_pipe->Read())
         {
-            Read_callback_(*buffer);
+            read_callback_(*buffer);
         }
     }
 };
@@ -160,7 +158,7 @@ public:
             return;
         }
 
-        (!loader->Unload(seq, process_id, module));
+        if (!loader->Unload(seq, process_id, module))
         {
             InvokeCallback(seq, false);
         }
@@ -234,7 +232,7 @@ private:
     std::uint8_t InsertCallback(std::variant<std::function<void(std::optional<HMODULE>)>, std::function<void(bool)>> callback)
     {
         std::scoped_lock lock(callback_mutex_);
-        callbacks_[sequence_number_] = callback;
+        callbacks_.emplace(std::make_pair(sequence_number_, callback));
         return sequence_number_++;
     }
 

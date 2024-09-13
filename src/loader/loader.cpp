@@ -215,62 +215,6 @@
 
 // };
 
-class VirtualMemory
-{
-public:
-	static std::optional<VirtualMemory> Allocate(HANDLE process_handle, std::size_t size)
-	{
-		void *memory = VirtualAllocEx(process_handle, nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-		return memory ? std::make_optional<VirtualMemory>(VirtualMemory(process_handle, memory)) : std::nullopt;
-	}
-
-	static std::optional<VirtualMemory> Allocate(std::size_t size)
-	{
-		void *memory = VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-		return memory ? std::make_optional<VirtualMemory>(memory) : std::nullopt;
-	}
-
-	VirtualMemory(const VirtualMemory &) = delete;
-	VirtualMemory(VirtualMemory &&other) noexcept : process_handle_(other.process_handle_), memory_(other.memory_)
-	{
-		other.memory_ = nullptr;
-	}
-
-	VirtualMemory &operator=(const VirtualMemory) = delete;
-	VirtualMemory &operator=(VirtualMemory &) = delete;
-
-	~VirtualMemory()
-	{
-		if (memory_)
-		{
-			if (process_handle_)
-			{
-				VirtualFreeEx(*process_handle_, memory_, 0, MEM_RELEASE);
-			}
-			else
-			{
-				VirtualFree(memory_, 0, MEM_RELEASE);
-			}
-		}
-	}
-	void *operator*()
-	{
-		return memory_;
-	}
-
-	void *get()
-	{
-		return memory_;
-	}
-
-private:
-	VirtualMemory(HANDLE process_handle, void *memory) : process_handle_(process_handle), memory_(memory) {};
-	VirtualMemory(void *memory) : process_handle_(std::nullopt), memory_(memory) {};
-
-	std::optional<HANDLE> process_handle_;
-	void *memory_;
-};
-
 class RemoteThread
 {
 public:
@@ -318,69 +262,93 @@ private:
 	HANDLE handle_;
 };
 
-std::optional<HMODULE> LoadModule(HANDLE process_handle, std::wstring dll)
+std::optional<HMODULE> LoadModule(HANDLE process, std::wstring dll)
 {
 
-	const auto kernel_module = pfw::GetRemoteModuleHandle(process_handle, L"Kernel32.dll");
+	const auto kernel_module = pfw::GetRemoteModuleHandle(process, L"Kernel32.dll");
 	if (!kernel_module)
 	{
 		return std::nullopt;
 	}
 
-	const auto load_library = pfw::GetRemoteProcAddress(process_handle, *kernel_module, "LoadLibraryW");
+	const auto load_library = pfw::GetRemoteProcAddress(process, *kernel_module, "LoadLibraryW");
 	if (!load_library)
 	{
 		return std::nullopt;
 	}
 
-	const auto dll_path_size_in_bytes = (dll.size() + 1) * sizeof(std::wstring::traits_type::char_type);
+	const auto dll_size = (dll.size() + 1) * sizeof(std::wstring::traits_type::char_type);
 
-	auto load_library_arg = VirtualMemory::Allocate(process_handle, dll_path_size_in_bytes);
+	auto load_library_arg = pfw::RemoteVirtualMemory::Create(process, dll_size);
 	if (!load_library_arg)
 	{
 		return std::nullopt;
 	}
 
-	if (!pfw::SetRemoteMemory(process_handle, **load_library_arg, dll.c_str(), dll_path_size_in_bytes))
+	if (!pfw::SetRemoteMemory(*load_library_arg, dll.c_str(), dll_size)) // c_str guarantees the trailing '\0'
 	{
 		return std::nullopt;
 	}
 
-	auto loader_thread = RemoteThread::Create(process_handle, *load_library, **load_library_arg);
-	if (!loader_thread)
+	auto loader = RemoteThread::Create(process, *load_library, load_library_arg->get());
+	if (!loader)
 	{
 		return std::nullopt;
 	}
 
-	loader_thread->Join();
+	loader->Join();
 
-	const auto exit_code = loader_thread->GetExitCode();
+	const auto exit_code = loader->GetExitCode();
 	if (!exit_code)
 	{
 		return std::nullopt;
 	}
 
-	return pfw::GetRemoteModuleHandle(process_handle, std::filesystem::path(dll).filename().wstring());
+	return pfw::GetRemoteModuleHandle(process, std::filesystem::path(dll).filename().wstring());
 }
 
-// void UnloadModule(HANDLE process_handle)
-// {
-// 	pfw::ProcessHandle process_handle = process_.GetProcessHandle();
-// 	VirtualMemory module_handle_memory(process_handle, nullptr, sizeof(HMODULE), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-// 	pfw::SetRemoteMemory(process_handle, module_handle_memory, this->handle_);
-// 	HMODULE kernel_module = pfw::GetRemoteModuleHandle(process_handle, "Kernel32.dll");
-// 	void *free_library = pfw::GetRemoteProcAddress(process_handle, kernel_module, "FreeLibrary");
-// 	pfw::RemoteThread loader_thread(process_handle, free_library, module_handle_memory);
-// 	loader_thread.Join();
-// }
+bool UnloadModule(HANDLE process, HMODULE module)
+{
 
-// class Process
-// {
-// 	std::optional<HANDLE> OpenProcess
-// 	{
+	auto kernel_module = pfw::GetRemoteModuleHandle(process, L"Kernel32.dll");
+	if (!kernel_module)
+	{
+		return false;
+	}
 
-// 	}
-// };
+	auto free_library = pfw::GetRemoteProcAddress(process, *kernel_module, "FreeLibrary");
+	if (!free_library)
+	{
+		return false;
+	}
+
+	auto free_arg = pfw::RemoteVirtualMemory::Create(process, sizeof(HMODULE));
+	if (!free_arg)
+	{
+		return false;
+	}
+
+	if (!pfw::SetRemoteMemory(*free_arg, module))
+	{
+		return false;
+	}
+
+	auto unloader = RemoteThread::Create(process, *free_library, free_arg->get());
+	if (!unloader)
+	{
+		return false;
+	}
+
+	unloader->Join();
+
+	const auto exit_code = unloader->GetExitCode();
+	if (!exit_code)
+	{
+		return false;
+	}
+
+	return true;
+}
 
 class Handler
 {
@@ -436,18 +404,22 @@ public:
 			{
 			case RemoteProcedure::Load:
 			{
-
 				DWORD process_id;
 				deserializer.deserialize(process_id);
 				std::wstring dll;
 				deserializer.deserialize(dll);
 				auto module = Load(process_id, std::move(dll));
-				Serializer serializer;
-				Write(serializer.serialize(rpc).serialize(seq).serialize(module).buffer());
+				Write(Serializer().serialize(rpc).serialize(seq).serialize(module).buffer());
 			}
 			break;
 			case RemoteProcedure::Unload:
 			{
+				DWORD process_id;
+				deserializer.deserialize(process_id);
+				HMODULE module;
+				deserializer.deserialize(module);
+				auto success = Unload(process_id, module);
+				Write(Serializer().serialize(rpc).serialize(seq).serialize(success).buffer());
 			}
 			break;
 			case RemoteProcedure::Close:
@@ -465,13 +437,27 @@ public:
 	std::optional<HMODULE> Load(DWORD process_id, std::wstring dll)
 	{
 
-		auto process_handle = pfw::OpenProcess(process_id);
-		if (!process_handle)
+		auto process = pfw::OpenProcess(process_id);
+		if (!process)
 		{
 			return std::nullopt;
 		}
 
-		return LoadModule(*process_handle, dll);
+		auto module = LoadModule(*process, dll);
+		processes_.emplace(std::make_pair(process_id, std::move(*process)));
+		return module;
+	}
+
+	bool Unload(DWORD process_id, HMODULE module)
+	{
+
+		auto process = processes_.find(process_id);
+		if (process == processes_.end())
+		{
+			return false;
+		}
+
+		return UnloadModule(process->second, module);
 	}
 
 	template <typename Buffer>
@@ -486,6 +472,7 @@ public:
 	auto operator=(const Handler &) = delete;
 
 private:
+	std::unordered_map<DWORD, pfw::Handle> processes_;
 	std::unique_ptr<ReadPipe> read_pipe_;
 	std::mutex mutex_;
 	std::condition_variable_any cv_;
