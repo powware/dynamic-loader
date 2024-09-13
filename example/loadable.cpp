@@ -1,12 +1,12 @@
-#include <Windows.h>
+#include <pfw.h>
 
-DWORD WINAPI hello()
+DWORD WINAPI hello() noexcept
 {
     MessageBoxW(nullptr, L"hellooooo :3", L"hiiiiiii <3", 0);
     return 0;
 }
 
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
+BOOL WINAPI DllMain(HINSTANCE, DWORD fdwReason, LPVOID)
 {
     switch (fdwReason)
     {

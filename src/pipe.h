@@ -35,6 +35,9 @@ public:
         return buffer;
     }
 
+    ReadPipe(const ReadPipe &) = delete;
+    auto operator=(const ReadPipe &) = delete;
+
 private:
     pfw::Handle handle_;
 };
@@ -56,6 +59,9 @@ public:
 
         return true;
     }
+
+    WritePipe(const WritePipe &) = delete;
+    auto operator=(const WritePipe &) = delete;
 
 private:
     pfw::Handle handle_;

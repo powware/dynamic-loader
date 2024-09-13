@@ -1,8 +1,8 @@
 #include "mainwindow.h"
 
-#include <windows.h>
-#include <shellapi.h>
 #include <format>
+
+#include <shellapi.h>
 
 #include <QFileDialog>
 
@@ -308,7 +308,7 @@ void MainWindow::UnloadClicked()
                     { QCoreApplication::postEvent(this, new UnloadEvent(process, module, success)); });
 }
 
-void MainWindow::ModuleListCurrentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous)
+void MainWindow::ModuleListCurrentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem * /*previous*/)
 {
     if (current->text(3) == "Module")
     {

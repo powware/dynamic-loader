@@ -3,7 +3,7 @@
 
 #include <QEvent>
 
-#include <Windows.h>
+#include <pfw.h>
 
 const QEvent::Type LoadEventType = static_cast<QEvent::Type>(QEvent::registerEventType());
 

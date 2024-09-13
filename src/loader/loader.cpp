@@ -450,6 +450,10 @@ public:
 			{
 			}
 			break;
+			case RemoteProcedure::Close:
+			{
+			}
+			break;
 			default:
 			{
 			}
@@ -478,13 +482,19 @@ public:
 		cv_.notify_one();
 	}
 
+	Handler(const Handler &) = delete;
+	auto operator=(const Handler &) = delete;
+
 private:
 	std::unique_ptr<ReadPipe> read_pipe_;
 	std::mutex mutex_;
 	std::condition_variable_any cv_;
 	std::queue<std::vector<std::byte>> queue_;
 	std::jthread thread_; // destroys before the variables used inside of it, also destroys write_pipe before read_pipe
-	Handler(pfw::Handle &&read_handle, pfw::Handle &&write_handle) : read_pipe_(std::make_unique<ReadPipe>(std::forward<pfw::Handle>(read_handle))), thread_(std::bind_front(&Handler::WriteThread, this, std::make_unique<WritePipe>(std::forward<pfw::Handle>(write_handle)))) {}
+	Handler(pfw::Handle &&read_handle, pfw::Handle &&write_handle) : read_pipe_(std::make_unique<ReadPipe>(std::forward<pfw::Handle>(read_handle)))
+	{
+		thread_ = std::jthread(std::bind_front(&Handler::WriteThread, this, std::make_unique<WritePipe>(std::forward<pfw::Handle>(write_handle))));
+	}
 };
 
 int wmain()

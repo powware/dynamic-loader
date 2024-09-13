@@ -14,8 +14,6 @@
 #include <unordered_map>
 #include <variant>
 
-#include <Windows.h>
-
 #include <pfw.h>
 
 #include "pipe.h"

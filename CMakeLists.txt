@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.29)
 
 project(
   dynmaic-loader
@@ -23,6 +23,8 @@ endif()
 message(STATUS "Target: x${TARGET_BITNESS}")
 
 find_package(pfw REQUIRED)
+
+add_compile_options(/W4 /WX)
 
 add_executable(loader ${PROJECT_SOURCE_DIR}/src/loader/loader.cpp)
 
@@ -57,3 +59,5 @@ target_include_directories(loader PRIVATE ${PROJECT_SOURCE_DIR}/src)
 find_package(pfw REQUIRED)
 
 target_link_libraries(loader PRIVATE pfw::pfw)
+target_link_libraries(process PRIVATE pfw::pfw)
+target_link_libraries(loadable PRIVATE pfw::pfw)
