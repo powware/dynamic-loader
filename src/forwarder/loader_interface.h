@@ -16,8 +16,8 @@
 
 #include <pfw.h>
 
-#include "pipe.h"
-#include "serialization.h"
+#include "ipc/pipe.h"
+#include "ipc/serialization.h"
 
 class Loader
 {
